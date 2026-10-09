@@ -86,7 +86,7 @@ import { confetti, tap } from '../../shared/confetti';
       .sposter { width: 56px; height: 84px; border-radius: 8px; object-fit: cover; flex: none; }
       .sbody { flex: 1; min-width: 0; } .st { font-size: 17px; font-weight: 800; } .sd { color: var(--muted); font-size: 13px; margin-top: 2px; }
       .chev { width: 26px; height: 26px; color: var(--muted); flex: none; transition: transform .2s; } }
-    .season.open .season-h { .chev { transform: rotate(180deg); color: var(--text); } }
+    .season.open .season-h { .chev { transform: rotate(180deg); color: var(--accent); } }
     .row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-bottom: 1px solid var(--line); &.future { opacity: .45; }
       .still { width: 112px; height: 63px; border-radius: 8px; object-fit: cover; flex: none; }
       .body { flex: 1; min-width: 0; } .code { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--accent); }

@@ -12,7 +12,8 @@ Documento de referência do que a app faz hoje. Atualizar sempre que o comportam
   e não refletem o hábito real — ver §5.3.
 
 ## 2. Stack e infraestrutura
-- Angular 19 standalone + signals, PWA (service worker `ngsw`), SCSS global em `src/styles.scss` (tema escuro, amarelo `--accent`).
+- Angular 19 standalone + signals, PWA (service worker `ngsw`), SCSS global em `src/styles.scss` (tema escuro; o amarelo `--accent` é a cor de destaque:
+  aba ativa, item ativo da barra de baixo, seta da temporada aberta, códigos de episódio, botões principais).
 - Supabase JS v2; sessão por email + palavra-passe. RLS: tudo permitido a `authenticated`, nada a anónimos.
 - TMDB API v3 com *API Read Access Token* (Bearer). Imagens: poster `w342`, backdrop `w780`, still `w300`.
 - Deploy: push em `main` → GitHub Actions escreve `environment.ts` a partir dos *secrets* (`SUPABASE_URL`,
