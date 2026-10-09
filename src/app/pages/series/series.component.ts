@@ -2,6 +2,7 @@ import { AfterViewChecked, Component, ElementRef, computed, inject, signal } fro
 import { DatePipe } from '@angular/common';
 import { LibraryService } from '../../core/library.service';
 import { EpisodeCardComponent } from '../../shared/episode-card.component';
+import { confetti } from '../../shared/confetti';
 
 @Component({
   selector: 'app-series',
@@ -14,6 +15,7 @@ import { EpisodeCardComponent } from '../../shared/episode-card.component';
 
     @if (!lib.loaded()) { <div class="spinner"></div> }
     @else if (tab() === 'lista') {
+      <div class="fade">
       <!-- passado (mais antigo em cima, mais recente logo acima do primeiro por ver) -->
       @for (h of pastOldestFirst(); track h.episode_id) {
         <app-episode-card [showId]="h.show_id" [season]="h.episode.season" [number]="h.episode.number"
@@ -25,29 +27,32 @@ import { EpisodeCardComponent } from '../../shared/episode-card.component';
       }
       @if (lib.nextRecent().length) {
         <div class="daylabel">A acompanhar</div>
-        @for (n of lib.nextRecent(); track n.episode_id) {
-          <app-episode-card [showId]="n.show_id" [season]="n.season" [number]="n.number" [title]="n.name"
-            [remaining]="n.remaining" (toggle)="lib.markWatched(n.episode_id, n.show_id)" />
+        @for (n of lib.nextRecent(); track n.episode_id; let i = $index) {
+          <app-episode-card [showId]="n.show_id" [season]="n.season" [number]="n.number" [title]="n.name" [index]="i"
+            [remaining]="n.remaining" (toggle)="watch(n.episode_id, n.show_id, n.season)" />
         }
       }
       @if (lib.nextOther().length) {
         <div class="daylabel">Há algum tempo sem ver</div>
-        @for (n of lib.nextOther(); track n.episode_id) {
-          <app-episode-card [showId]="n.show_id" [season]="n.season" [number]="n.number" [title]="n.name"
-            [remaining]="n.remaining" (toggle)="lib.markWatched(n.episode_id, n.show_id)" />
+        @for (n of lib.nextOther(); track n.episode_id; let i = $index) {
+          <app-episode-card [showId]="n.show_id" [season]="n.season" [number]="n.number" [title]="n.name" [index]="i"
+            [remaining]="n.remaining" (toggle)="watch(n.episode_id, n.show_id, n.season)" />
         }
       }
+      </div>
     }
     @else {
+      <div class="fade">
       @for (g of upcomingByDay(); track g.day) {
         <div class="daylabel">{{ g.day | date:'EEEE, d MMMM':'':'pt-PT' }}</div>
-        @for (e of g.items; track e.tmdb_id) {
-          <app-episode-card [showId]="e.show_id" [season]="e.season" [number]="e.number" [title]="e.name"
+        @for (e of g.items; track e.tmdb_id; let i = $index) {
+          <app-episode-card [showId]="e.show_id" [season]="e.season" [number]="e.number" [title]="e.name" [index]="i"
             (toggle)="lib.markWatched(e.tmdb_id, e.show_id)" />
         }
       } @empty {
         <div class="empty"><h2>Nada agendado</h2><p>Quando as séries que segues tiverem datas de estreia, aparecem aqui.</p></div>
       }
+      </div>
     }
   `,
 })
@@ -67,6 +72,13 @@ export class SeriesComponent implements AfterViewChecked {
     }
     return [...groups.entries()].map(([day, items]) => ({ day, items }));
   });
+
+  /** Marca como visto e, se com isso a temporada ficou completa (o próximo por ver é de outra temporada ou não há), confetis. */
+  async watch(episodeId: number, showId: number, season: number) {
+    await this.lib.markWatched(episodeId, showId);
+    const next = this.lib.next().find(n => n.show_id === showId);
+    if (!next || next.season !== season) confetti();
+  }
 
   /** Muda de aba e repõe o scroll: Brevemente começa na data mais próxima (topo); Lista volta ao primeiro por ver. */
   setTab(t: 'lista' | 'breve') {

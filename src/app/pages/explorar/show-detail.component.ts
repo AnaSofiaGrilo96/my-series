@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, input, signal } from '@angular/cor
 import { DatePipe, Location } from '@angular/common';
 import { EpisodeWithWatched, LibraryService } from '../../core/library.service';
 import { IMG, ShowDetail, TmdbService } from '../../core/tmdb.service';
+import { confetti, tap } from '../../shared/confetti';
 
 @Component({
   selector: 'app-show-detail',
@@ -50,8 +51,8 @@ import { IMG, ShowDetail, TmdbService } from '../../core/tmdb.service';
               <svg class="chev" viewBox="0 0 24 24"><path d="M8 10l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             @if (open() === s.season) {
-              @for (e of s.items; track e.tmdb_id) {
-                <div class="row" [class.future]="isFuture(e.air_date)">
+              @for (e of s.items; track e.tmdb_id; let i = $index) {
+                <div class="row fade-in" [class.future]="isFuture(e.air_date)" [style.--i]="i">
                   @if (e.still_path) { <img class="still" [src]="still(e.still_path)" alt="" loading="lazy" /> } @else { <div class="still noimg"></div> }
                   <div class="body">
                     <div class="code">S{{ pad(e.season) }} E{{ pad(e.number) }}</div>
@@ -59,7 +60,7 @@ import { IMG, ShowDetail, TmdbService } from '../../core/tmdb.service';
                     <div class="d">{{ e.air_date ? (e.air_date | date:'d MMM yyyy':'':'pt-PT') : 'Sem data' }}</div>
                   </div>
                   @if (!isFuture(e.air_date)) {
-                    <button class="check" [class.done]="e.watched" (click)="toggleEp(e)" [attr.aria-label]="e.watched ? 'Desmarcar' : 'Marcar como visto'">
+                    <button class="check" [class.done]="e.watched" [class.pop]="e.watched && justToggled() === e.tmdb_id" (click)="toggleEp(e)" [attr.aria-label]="e.watched ? 'Desmarcar' : 'Marcar como visto'">
                       <svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                   }
@@ -132,9 +133,25 @@ export class ShowDetailComponent {
   add() { return this.run(() => this.lib.addShow(+this.id())).then(() => this.tab.set('eps')); }
   toggleFollow() { const s = this.saved()!; return this.run(() => this.lib.setFollowed(s.tmdb_id, !s.followed)); }
   remove() { if (confirm('Remover esta série e todo o histórico de episódios vistos?')) return this.run(() => this.lib.removeShow(+this.id())).then(() => this.loc.back()); return; }
-  toggleEp(e: EpisodeWithWatched) { return this.run(() => e.watched ? this.lib.unmarkWatched(e.tmdb_id) : this.lib.markWatched(e.tmdb_id, e.show_id)); }
-  markSeason(s: { season: number; items: EpisodeWithWatched[] }) {
+  justToggled = signal<number | null>(null);
+  private seasonDone(season: number) {
+    const s = this.seasons().find(x => x.season === season); return !!s && s.aired > 0 && s.watched === s.aired;
+  }
+  /** Otimista: muda logo na lista e grava em segundo plano; confetis se a temporada ficou completa. */
+  async toggleEp(e: EpisodeWithWatched) {
+    tap();
+    const wasDone = this.seasonDone(e.season);
+    this.episodes.update(list => list.map(x => x.tmdb_id === e.tmdb_id ? { ...x, watched: !e.watched } : x));
+    this.justToggled.set(e.tmdb_id);
+    if (!wasDone && this.seasonDone(e.season)) confetti();
+    try { await (e.watched ? this.lib.unmarkWatched(e.tmdb_id) : this.lib.markWatched(e.tmdb_id, e.show_id)); }
+    finally { await this.reloadEpisodes(); }
+  }
+  async markSeason(s: { season: number; items: EpisodeWithWatched[] }) {
     const last = [...s.items].reverse().find(i => !this.isFuture(i.air_date)); if (!last) return;
-    return this.run(() => this.lib.markUpTo(+this.id(), s.season, last.number));
+    const wasDone = this.seasonDone(s.season);
+    this.episodes.update(list => list.map(x => x.show_id === last.show_id && (x.season < s.season || (x.season === s.season && x.number <= last.number)) ? { ...x, watched: true } : x));
+    if (!wasDone) confetti({ count: 220 });
+    try { await this.lib.markUpTo(+this.id(), s.season, last.number); } finally { await this.reloadEpisodes(); }
   }
 }

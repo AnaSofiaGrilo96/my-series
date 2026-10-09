@@ -86,7 +86,8 @@ Todos os episódios futuros (`air_date > hoje`) das séries seguidas, até 200, 
 ("quinta-feira, 29 outubro"), da data mais próxima para a mais distante. Ao mudar para esta aba o scroll vai ao topo.
 O ✓ também existe (marca como visto). Vazio: "Nada agendado".
 
-**Cartão de episódio** (`app-episode-card`): poster da série, nome da série (link para a página da série), `Sxx | Exx` (+N), título, botão ✓.
+**Cartão de episódio** (`app-episode-card`): poster da série, nome da série em *pill* (link para a página da série), `Sxx | Exx` (+N), título, botão ✓.
+O ✓ responde de imediato (estado otimista + vibração curta no Android + animação *pop*); a lista real atualiza quando o servidor responder.
 
 ### 5.4 Explorar (`/explorar`)
 Campo de pesquisa (debounce 350 ms) sobre `search/tv` do TMDB; sem pesquisa mostra "Em alta esta semana" (`trending/tv/week`).
@@ -109,6 +110,15 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
 - **As minhas séries**: grelha de todas as séries da biblioteca, cada poster com **barra de 4 px no topo** na cor do estado (§4),
   ordenadas por estado (por ver → tudo visto → terminadas) e alfabeticamente (`pt`) dentro de cada grupo; séries não seguidas a 45% de opacidade.
 
+## 5.7 Animações e feedback
+- Mudança de página: cross-fade curto (router `withViewTransitions`). Mudança de aba: o conteúdo entra com *fade-up*.
+- Listas: cada item entra com *fade-up* escalonado pela posição (`--i`, máx. 12 × 28 ms).
+- Botões: encolhem ligeiramente ao toque; o ✓ faz *pop* ao ficar verde. `prefers-reduced-motion` desliga as animações.
+- Na página da série, marcar/desmarcar um episódio é otimista (muda logo, grava em segundo plano, sem spinner).
+- **Confetis** (`shared/confetti.ts`, canvas sem dependências) quando uma temporada fica completa: ao marcar na Lista para ver o último
+  episódio por ver de uma temporada (o próximo por ver passa a ser de outra temporada, ou não há), ou na página da série ao marcar o último
+  episódio emitido da temporada / "Marcar temporada como vista".
+
 ## 6. Sincronização com o TMDB (`syncFollowed`)
 Ao abrir a página Séries: para cada série seguida cujo `status` não seja Ended/Canceled e com `last_synced_at` há mais de
 12 h (ou nulo), volta a buscar a série e todos os episódios ao TMDB e faz upsert. Sinal `syncing` durante o processo.
@@ -124,6 +134,7 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
 
 ## 9. Histórico de alterações
 - 2026-10-08 — Projeto criado; importação inicial do histórico.
+- 2026-10-09 — Animações, feedback imediato no ✓, confetis ao completar temporada, nome da série em pill.
 - 2026-10-09 — Aviso de nova versão (service worker) com botão Atualizar.
 - 2026-10-09 — Página da série: aba Episódios redesenhada (posters de temporada, stills, S01 E01, seta de expandir).
 - 2026-10-09 — Removido o conceito de favorita (só existe seguir); Perfil com uma única grelha "As minhas séries" e estatística de episódios por ver; ✓ no Explorar para séries seguidas.
