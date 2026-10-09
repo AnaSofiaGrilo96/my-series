@@ -56,6 +56,11 @@ o `schema.sql` é mantido também atualizado para instalação de raiz.
 Email + palavra-passe (Supabase). Erro genérico "Email ou palavra-passe incorretos.". Rotas protegidas por `authGuard`
 (sem sessão → `/login`). Após login → `/series`. Rota desconhecida → `/series`.
 
+### 5.1b Nova versão
+O service worker verifica atualizações ao arrancar e sempre que a app volta ao primeiro plano. Quando uma nova versão está
+descarregada (`VERSION_READY`), aparece um aviso amarelo fixo acima da barra de navegação, "Há uma nova versão da app." com
+botão **Atualizar** que recarrega a página. Só em produção (o service worker está desligado em `ng serve`).
+
 ### 5.2 Navegação
 Barra fixa em baixo (só com sessão): **Séries** (`/series`), **Explorar** (`/explorar`), **Perfil** (`/perfil`).
 Ao abrir qualquer página, se a biblioteca ainda não carregou, `loadAll()`; na página Séries corre também `syncFollowed()`.
@@ -119,6 +124,7 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
 
 ## 9. Histórico de alterações
 - 2026-10-08 — Projeto criado; importação inicial do histórico.
+- 2026-10-09 — Aviso de nova versão (service worker) com botão Atualizar.
 - 2026-10-09 — Página da série: aba Episódios redesenhada (posters de temporada, stills, S01 E01, seta de expandir).
 - 2026-10-09 — Removido o conceito de favorita (só existe seguir); Perfil com uma única grelha "As minhas séries" e estatística de episódios por ver; ✓ no Explorar para séries seguidas.
 - 2026-10-09 — Ícone e nome da app (manifest, favicon, apple-touch-icon); correção YAML do workflow.

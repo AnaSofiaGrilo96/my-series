@@ -1,5 +1,7 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
+import { filter } from 'rxjs';
 import { SupabaseService } from './core/supabase.service';
 
 @Component({
@@ -7,6 +9,12 @@ import { SupabaseService } from './core/supabase.service';
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
   template: `
     <main class="page"><router-outlet /></main>
+    @if (updateReady()) {
+      <div class="update">
+        <span>Há uma nova versão da app.</span>
+        <button (click)="reload()">Atualizar</button>
+      </div>
+    }
     @if (sb.session()) {
       <nav class="tabbar">
         <a routerLink="/series" routerLinkActive="on">
@@ -25,4 +33,20 @@ import { SupabaseService } from './core/supabase.service';
     }
   `,
 })
-export class AppComponent { sb = inject(SupabaseService); }
+export class AppComponent {
+  sb = inject(SupabaseService);
+  private swUpdate = inject(SwUpdate);
+  /** Nova versão já descarregada pelo service worker: mostra o aviso para recarregar (senão só se aplicava ao fechar e reabrir a app). */
+  updateReady = signal(false);
+
+  constructor() {
+    if (!this.swUpdate.isEnabled) return;
+    this.swUpdate.versionUpdates.pipe(filter((e): e is VersionReadyEvent => e.type === 'VERSION_READY'))
+      .subscribe(() => this.updateReady.set(true));
+    const check = () => this.swUpdate.checkForUpdate().catch(() => {});
+    check();
+    // PWA instalada fica muito tempo aberta em segundo plano: volta a verificar sempre que regressa ao primeiro plano
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  }
+  reload() { document.location.reload(); }
+}
