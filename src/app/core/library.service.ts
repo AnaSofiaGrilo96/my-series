@@ -122,6 +122,20 @@ export class LibraryService {
     if (rows.length) await this.sb.from('watched').upsert(rows, { onConflict: 'episode_id', ignoreDuplicates: true });
     await this.refreshAfterWatch();
   }
+  /** Marca (ou desmarca) como vistos todos os episódios já emitidos de uma temporada. */
+  async setSeasonWatched(showId: number, season: number, watched: boolean) {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data } = await this.sb.from('episodes').select('tmdb_id').eq('show_id', showId).eq('season', season).lte('air_date', today);
+    const ids = (data ?? []).map(e => e.tmdb_id);
+    if (!ids.length) return;
+    if (watched) {
+      const now = new Date().toISOString();
+      await this.sb.from('watched').upsert(ids.map(id => ({ episode_id: id, show_id: showId, watched_at: now })), { onConflict: 'episode_id', ignoreDuplicates: true });
+    } else {
+      await this.sb.from('watched').delete().in('episode_id', ids);
+    }
+    await this.refreshAfterWatch();
+  }
   private refreshAfterWatch() {
     return Promise.all([this.loadNext(), this.loadHistory(), this.loadStats()]);
   }

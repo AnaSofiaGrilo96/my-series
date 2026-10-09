@@ -42,14 +42,22 @@ import { confetti, tap } from '../../shared/confetti';
       } @else {
         @for (s of seasons(); track s.season) {
           <div class="season" [class.open]="open() === s.season">
-            <button class="season-h" (click)="open.set(open() === s.season ? null : s.season)" [attr.aria-expanded]="open() === s.season">
-              @if (seasonPoster(s.season)) { <img class="sposter" [src]="seasonPoster(s.season)" alt="" loading="lazy" /> } @else { <div class="sposter noimg"></div> }
-              <div class="sbody">
-                <div class="st">Temporada {{ s.season }}</div>
-                <div class="sd">{{ s.watched }}/{{ s.aired }} vistos @if (s.items.length > s.aired) { · {{ s.items.length - s.aired }} por estrear }</div>
-              </div>
-              <svg class="chev" viewBox="0 0 24 24"><path d="M8 10l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
+            <div class="season-h">
+              <button class="expand" (click)="open.set(open() === s.season ? null : s.season)" [attr.aria-expanded]="open() === s.season">
+                @if (seasonPoster(s.season)) { <img class="sposter" [src]="seasonPoster(s.season)" alt="" loading="lazy" /> } @else { <div class="sposter noimg"></div> }
+                <div class="sbody">
+                  <div class="st">Temporada {{ s.season }}</div>
+                  <div class="sd">{{ s.watched }}/{{ s.aired }} vistos @if (s.items.length > s.aired) { · {{ s.items.length - s.aired }} por estrear }</div>
+                </div>
+                <svg class="chev" viewBox="0 0 24 24"><path d="M8 10l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              @if (s.aired > 0) {
+                <button class="check" [class.done]="s.watched === s.aired" [class.pop]="justSeason() === s.season" (click)="toggleSeason(s)"
+                  [attr.aria-label]="s.watched === s.aired ? 'Desmarcar temporada' : 'Marcar temporada como vista'">
+                  <svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              }
+            </div>
             @if (open() === s.season) {
               @for (e of s.items; track e.tmdb_id; let i = $index) {
                 <div class="row fade-in" [class.future]="isFuture(e.air_date)" [style.--i]="i">
@@ -66,7 +74,6 @@ import { confetti, tap } from '../../shared/confetti';
                   }
                 </div>
               }
-              <button class="markall" (click)="markSeason(s)">Marcar temporada {{ s.season }} como vista</button>
             }
           </div>
         }
@@ -82,7 +89,9 @@ import { confetti, tap } from '../../shared/confetti';
     .toptabs.sub { position: static; padding-top: 0; border-bottom: 1px solid var(--line); button { padding: 10px 0; font-size: 13px; } }
     .about { padding: 16px; color: #ddd; .genres { color: var(--muted); font-size: 14px; } }
     .noimg { background: var(--surface-2); }
-    .season-h { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--line);
+    .season-h { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line);
+      .expand { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; text-align: left; }
+      .check { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); flex: none; &.done { background: var(--ok); color: #fff; } svg { width: 22px; height: 22px; } }
       .sposter { width: 56px; height: 84px; border-radius: 8px; object-fit: cover; flex: none; }
       .sbody { flex: 1; min-width: 0; } .st { font-size: 17px; font-weight: 800; } .sd { color: var(--muted); font-size: 13px; margin-top: 2px; }
       .chev { width: 26px; height: 26px; color: var(--muted); flex: none; transition: transform .2s; } }
@@ -92,7 +101,6 @@ import { confetti, tap } from '../../shared/confetti';
       .body { flex: 1; min-width: 0; } .code { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--accent); }
       .t { font-size: 15px; font-weight: 600; margin-top: 2px; } .d { color: var(--muted); font-size: 12px; margin-top: 2px; }
       .check { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); flex: none; &.done { background: var(--ok); color: #fff; } svg { width: 22px; height: 22px; } } }
-    .markall { display: block; margin: 8px 16px 16px; color: var(--accent); font-weight: 700; font-size: 14px; }
   `],
 })
 export class ShowDetailComponent {
@@ -147,11 +155,14 @@ export class ShowDetailComponent {
     try { await (e.watched ? this.lib.unmarkWatched(e.tmdb_id) : this.lib.markWatched(e.tmdb_id, e.show_id)); }
     finally { await this.reloadEpisodes(); }
   }
-  async markSeason(s: { season: number; items: EpisodeWithWatched[] }) {
-    const last = [...s.items].reverse().find(i => !this.isFuture(i.air_date)); if (!last) return;
-    const wasDone = this.seasonDone(s.season);
-    this.episodes.update(list => list.map(x => x.show_id === last.show_id && (x.season < s.season || (x.season === s.season && x.number <= last.number)) ? { ...x, watched: true } : x));
-    if (!wasDone) confetti({ count: 220 });
-    try { await this.lib.markUpTo(+this.id(), s.season, last.number); } finally { await this.reloadEpisodes(); }
+  justSeason = signal<number | null>(null);
+  /** ✓ da temporada: marca todos os episódios emitidos (ou desmarca todos, se já estava completa). Otimista. */
+  async toggleSeason(s: { season: number; aired: number; watched: number }) {
+    tap();
+    const mark = s.watched !== s.aired;
+    this.episodes.update(list => list.map(x => x.season === s.season && !this.isFuture(x.air_date) ? { ...x, watched: mark } : x));
+    this.justSeason.set(mark ? s.season : null);
+    if (mark) confetti({ count: 220 });
+    try { await this.lib.setSeasonWatched(+this.id(), s.season, mark); } finally { await this.reloadEpisodes(); }
   }
 }

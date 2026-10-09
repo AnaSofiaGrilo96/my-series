@@ -101,8 +101,10 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
 - Abas **Sobre** (géneros, duração, sinopse) e **Episódios** (só se a série está na biblioteca): acordeão por temporada, cada cabeçalho com
   poster da temporada (TMDB, em runtime, não guardado), "Temporada N", `vistos/emitidos` (+ "N por estrear") e seta que roda ao abrir;
   cada episódio em linha larga com imagem (`still_path`), código `S01 E01` em amarelo, título por baixo e data (`d MMM yyyy`);
-  episódios futuros a 45% e sem ✓;
-  botão "Marcar temporada N como vista" marca todos os episódios **até ao último emitido dessa temporada, inclusive, e todos os anteriores** (`markUpTo`).
+  episódios futuros a 45% e sem ✓.
+  Cada temporada com episódios emitidos tem o seu próprio ✓ no cabeçalho: verde quando todos os emitidos estão vistos; tocar marca
+  todos os emitidos dessa temporada (só dessa) como vistos, ou desmarca todos se já estava completa (`setSeasonWatched`, otimista, confetis ao marcar).
+  (`markUpTo`, que marca até um episódio inclusive e todos os anteriores, continua no serviço mas sem botão na UI.)
 
 ### 5.6 Perfil (`/perfil`)
 - Cabeçalho com botão **Sair**.
@@ -118,7 +120,7 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
 - Na página da série, marcar/desmarcar um episódio é otimista (muda logo, grava em segundo plano, sem spinner).
 - **Confetis** (`shared/confetti.ts`, canvas sem dependências) quando uma temporada fica completa: ao marcar na Lista para ver o último
   episódio por ver de uma temporada (o próximo por ver passa a ser de outra temporada, ou não há), ou na página da série ao marcar o último
-  episódio emitido da temporada / "Marcar temporada como vista".
+  episódio emitido da temporada / ✓ da temporada.
 
 ## 6. Sincronização com o TMDB (`syncFollowed`)
 Ao abrir a página Séries: para cada série seguida cujo `status` não seja Ended/Canceled e com `last_synced_at` há mais de
@@ -136,6 +138,7 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
 
 ## 9. Histórico de alterações
 - 2026-10-08 — Projeto criado; importação inicial do histórico.
+- 2026-10-09 — ✓ por temporada na página da série (marca/desmarca todos os emitidos).
 - 2026-10-09 — Posters por temporada nos cartões das listas (coluna `season_posters`).
 - 2026-10-09 — Animações, feedback imediato no ✓, confetis ao completar temporada, nome da série em pill.
 - 2026-10-09 — Aviso de nova versão (service worker) com botão Atualizar.
