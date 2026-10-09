@@ -11,7 +11,8 @@ export const IMG = {
   still: (p?: string | null) => p ? `https://image.tmdb.org/t/p/w300${p}` : null,
 };
 
-export type ShowDetail = Omit<Show, 'followed' | 'favorite'> & { seasons: { season_number: number }[] };
+export type TmdbSeason = { season_number: number; name?: string; poster_path?: string | null; air_date?: string | null; episode_count?: number };
+export type ShowDetail = Omit<Show, 'followed' | 'favorite'> & { seasons: TmdbSeason[] };
 
 @Injectable({ providedIn: 'root' })
 export class TmdbService {

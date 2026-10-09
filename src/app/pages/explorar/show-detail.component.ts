@@ -1,10 +1,11 @@
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
-import { Location } from '@angular/common';
+import { DatePipe, Location } from '@angular/common';
 import { EpisodeWithWatched, LibraryService } from '../../core/library.service';
 import { IMG, ShowDetail, TmdbService } from '../../core/tmdb.service';
 
 @Component({
   selector: 'app-show-detail',
+  imports: [DatePipe],
   template: `
     <button class="back" (click)="loc.back()" aria-label="Voltar">←</button>
     @if (!detail()) { <div class="spinner"></div> }
@@ -39,21 +40,26 @@ import { IMG, ShowDetail, TmdbService } from '../../core/tmdb.service';
         </section>
       } @else {
         @for (s of seasons(); track s.season) {
-          <div class="season">
-            <button class="season-h" (click)="open.set(open() === s.season ? null : s.season)">
-              <span>Temporada {{ s.season }}</span>
-              <span class="count">{{ s.watched }}/{{ s.aired }}</span>
+          <div class="season" [class.open]="open() === s.season">
+            <button class="season-h" (click)="open.set(open() === s.season ? null : s.season)" [attr.aria-expanded]="open() === s.season">
+              @if (seasonPoster(s.season)) { <img class="sposter" [src]="seasonPoster(s.season)" alt="" loading="lazy" /> } @else { <div class="sposter noimg"></div> }
+              <div class="sbody">
+                <div class="st">Temporada {{ s.season }}</div>
+                <div class="sd">{{ s.watched }}/{{ s.aired }} vistos @if (s.items.length > s.aired) { · {{ s.items.length - s.aired }} por estrear }</div>
+              </div>
+              <svg class="chev" viewBox="0 0 24 24"><path d="M8 10l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             @if (open() === s.season) {
               @for (e of s.items; track e.tmdb_id) {
                 <div class="row" [class.future]="isFuture(e.air_date)">
-                  <div class="num">{{ e.number }}</div>
+                  @if (e.still_path) { <img class="still" [src]="still(e.still_path)" alt="" loading="lazy" /> } @else { <div class="still noimg"></div> }
                   <div class="body">
-                    <div class="t">{{ e.name }}</div>
-                    <div class="d">{{ e.air_date || 'Sem data' }}</div>
+                    <div class="code">S{{ pad(e.season) }} E{{ pad(e.number) }}</div>
+                    <div class="t">{{ e.name || 'Sem título' }}</div>
+                    <div class="d">{{ e.air_date ? (e.air_date | date:'d MMM yyyy':'':'pt-PT') : 'Sem data' }}</div>
                   </div>
                   @if (!isFuture(e.air_date)) {
-                    <button class="check" [class.done]="e.watched" (click)="toggleEp(e)">
+                    <button class="check" [class.done]="e.watched" (click)="toggleEp(e)" [attr.aria-label]="e.watched ? 'Desmarcar' : 'Marcar como visto'">
                       <svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                   }
@@ -74,10 +80,17 @@ import { IMG, ShowDetail, TmdbService } from '../../core/tmdb.service';
     .actions { display: flex; gap: 8px; padding: 14px 16px; overflow-x: auto; .btn { white-space: nowrap; padding: 10px 16px; font-size: 14px; } .danger { color: #ff6b6b; border-color: #ff6b6b; } }
     .toptabs.sub { position: static; padding-top: 0; border-bottom: 1px solid var(--line); button { padding: 10px 0; font-size: 13px; } }
     .about { padding: 16px; color: #ddd; .genres { color: var(--muted); font-size: 14px; } }
-    .season-h { width: 100%; display: flex; justify-content: space-between; padding: 14px 16px; font-weight: 800; border-bottom: 1px solid var(--line); .count { color: var(--muted); } }
-    .row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; &.future { opacity: .45; }
-      .num { width: 28px; color: var(--muted); font-weight: 800; } .body { flex: 1; min-width: 0; } .t { font-size: 15px; } .d { color: var(--muted); font-size: 12px; }
-      .check { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); &.done { background: var(--ok); color: #fff; } svg { width: 20px; height: 20px; } } }
+    .noimg { background: var(--surface-2); }
+    .season-h { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--line);
+      .sposter { width: 56px; height: 84px; border-radius: 8px; object-fit: cover; flex: none; }
+      .sbody { flex: 1; min-width: 0; } .st { font-size: 17px; font-weight: 800; } .sd { color: var(--muted); font-size: 13px; margin-top: 2px; }
+      .chev { width: 26px; height: 26px; color: var(--muted); flex: none; transition: transform .2s; } }
+    .season.open .season-h { .chev { transform: rotate(180deg); color: var(--text); } }
+    .row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-bottom: 1px solid var(--line); &.future { opacity: .45; }
+      .still { width: 112px; height: 63px; border-radius: 8px; object-fit: cover; flex: none; }
+      .body { flex: 1; min-width: 0; } .code { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--accent); }
+      .t { font-size: 15px; font-weight: 600; margin-top: 2px; } .d { color: var(--muted); font-size: 12px; margin-top: 2px; }
+      .check { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); flex: none; &.done { background: var(--ok); color: #fff; } svg { width: 22px; height: 22px; } } }
     .markall { display: block; margin: 8px 16px 16px; color: var(--accent); font-weight: 700; font-size: 14px; }
   `],
 })
@@ -109,6 +122,9 @@ export class ShowDetailComponent {
     if (!this.lib.loaded()) this.lib.loadAll();
   }
   isFuture = (d?: string | null) => !d || d > new Date().toISOString().slice(0, 10);
+  pad = (n: number) => String(n).padStart(2, '0');
+  still = IMG.still;
+  seasonPoster = (n: number) => IMG.poster(this.detail()?.seasons.find(s => s.season_number === n)?.poster_path);
 
   private async reloadEpisodes() { if (this.lib.showById().get(+this.id())) this.episodes.set(await this.lib.episodesOf(+this.id())); }
   private async run(fn: () => Promise<unknown>) { this.busy.set(true); try { await fn(); await this.reloadEpisodes(); } finally { this.busy.set(false); } }

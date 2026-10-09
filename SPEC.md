@@ -91,8 +91,10 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
 - Hero com backdrop, nome, ano, estado traduzido (Em emissão / Terminada / Cancelada / Em produção / Planeada) e canais.
 - Ações: se não está na biblioteca, **+ Seguir série** (`addShow`: grava série + todos os episódios de todas as temporadas e abre a aba Episódios);
   se está, **A seguir ✓ / Seguir** (toggle `followed`) e **Remover**.
-- Abas **Sobre** (géneros, duração, sinopse) e **Episódios** (só se a série está na biblioteca): acordeão por temporada com
-  contagem `vistos/emitidos`; cada episódio com número, título, data; episódios futuros a 45% e sem ✓;
+- Abas **Sobre** (géneros, duração, sinopse) e **Episódios** (só se a série está na biblioteca): acordeão por temporada, cada cabeçalho com
+  poster da temporada (TMDB, em runtime, não guardado), "Temporada N", `vistos/emitidos` (+ "N por estrear") e seta que roda ao abrir;
+  cada episódio em linha larga com imagem (`still_path`), código `S01 E01` em amarelo, título por baixo e data (`d MMM yyyy`);
+  episódios futuros a 45% e sem ✓;
   botão "Marcar temporada N como vista" marca todos os episódios **até ao último emitido dessa temporada, inclusive, e todos os anteriores** (`markUpTo`).
 
 ### 5.6 Perfil (`/perfil`)
@@ -117,6 +119,7 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
 
 ## 9. Histórico de alterações
 - 2026-10-08 — Projeto criado; importação inicial do histórico.
+- 2026-10-09 — Página da série: aba Episódios redesenhada (posters de temporada, stills, S01 E01, seta de expandir).
 - 2026-10-09 — Removido o conceito de favorita (só existe seguir); Perfil com uma única grelha "As minhas séries" e estatística de episódios por ver; ✓ no Explorar para séries seguidas.
 - 2026-10-09 — Ícone e nome da app (manifest, favicon, apple-touch-icon); correção YAML do workflow.
 - 2026-10-09 — Barra de estado e ordenação em "Todas as séries"; Lista para ver dividida em "A acompanhar" / "Há algum tempo sem ver"
