@@ -24,7 +24,7 @@ Documento de referência do que a app faz hoje. Atualizar sempre que o comportam
 ## 3. Modelo de dados (Supabase, `supabase/schema.sql`)
 | Tabela | Chave | Campos relevantes |
 |---|---|---|
-| `shows` | `tmdb_id` | `name`, `original_name`, `poster_path`, `backdrop_path`, `overview`, `status` (texto TMDB: Returning Series / Ended / Canceled / In Production / Planned), `first_air_date`, `episode_run_time`, `genres[]`, `networks[]`, `followed` (default true), `favorite` (default false), `added_at`, `last_synced_at` |
+| `shows` | `tmdb_id` | `name`, `original_name`, `poster_path`, `backdrop_path`, `overview`, `status` (texto TMDB: Returning Series / Ended / Canceled / In Production / Planned), `first_air_date`, `episode_run_time`, `genres[]`, `networks[]`, `season_posters` (jsonb `{"1": "/x.jpg"}`, poster por temporada), `followed` (default true), `favorite` (default false), `added_at`, `last_synced_at` |
 | `episodes` | `tmdb_id` | `show_id` → shows (cascade), `season`, `number`, `name`, `air_date`, `runtime`, `overview`, `still_path`; único `(show_id, season, number)` |
 | `watched` | `episode_id` → episodes (cascade) | `show_id`, `watched_at` (default now) |
 
@@ -86,7 +86,7 @@ Todos os episódios futuros (`air_date > hoje`) das séries seguidas, até 200, 
 ("quinta-feira, 29 outubro"), da data mais próxima para a mais distante. Ao mudar para esta aba o scroll vai ao topo.
 O ✓ também existe (marca como visto). Vazio: "Nada agendado".
 
-**Cartão de episódio** (`app-episode-card`): poster da série, nome da série em *pill* (link para a página da série), `Sxx | Exx` (+N), título, botão ✓.
+**Cartão de episódio** (`app-episode-card`): poster da **temporada** do episódio (`season_posters`, senão o da série), nome da série em *pill* (link para a página da série), `Sxx | Exx` (+N), título, botão ✓.
 O ✓ responde de imediato (estado otimista + vibração curta no Android + animação *pop*); a lista real atualiza quando o servidor responder.
 
 ### 5.4 Explorar (`/explorar`)
@@ -121,7 +121,8 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
 
 ## 6. Sincronização com o TMDB (`syncFollowed`)
 Ao abrir a página Séries: para cada série seguida cujo `status` não seja Ended/Canceled e com `last_synced_at` há mais de
-12 h (ou nulo), volta a buscar a série e todos os episódios ao TMDB e faz upsert. Sinal `syncing` durante o processo.
+12 h (ou nulo), volta a buscar a série e todos os episódios ao TMDB e faz upsert. Séries sem `season_posters` (anteriores à coluna)
+recebem só a ficha da série, uma vez. Sinal `syncing` durante o processo.
 Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a aparecer no Brevemente.
 
 ## 7. Constantes afináveis (`src/app/core/library.service.ts`)
@@ -134,6 +135,7 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
 
 ## 9. Histórico de alterações
 - 2026-10-08 — Projeto criado; importação inicial do histórico.
+- 2026-10-09 — Posters por temporada nos cartões das listas (coluna `season_posters`).
 - 2026-10-09 — Animações, feedback imediato no ✓, confetis ao completar temporada, nome da série em pill.
 - 2026-10-09 — Aviso de nova versão (service worker) com botão Atualizar.
 - 2026-10-09 — Página da série: aba Episódios redesenhada (posters de temporada, stills, S01 E01, seta de expandir).

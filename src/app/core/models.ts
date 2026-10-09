@@ -3,6 +3,8 @@ export interface Show {
   poster_path?: string | null; backdrop_path?: string | null; overview?: string | null;
   status?: string | null; first_air_date?: string | null; episode_run_time?: number | null;
   genres?: string[] | null; networks?: string[] | null;
+  /** poster por temporada: { "1": "/x.jpg" } */
+  season_posters?: Record<string, string | null> | null;
   followed: boolean; favorite: boolean; added_at?: string; last_synced_at?: string | null;
 }
 export interface Episode {

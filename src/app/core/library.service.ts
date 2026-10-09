@@ -126,15 +126,27 @@ export class LibraryService {
     return Promise.all([this.loadNext(), this.loadHistory(), this.loadStats()]);
   }
 
+  /** Poster da temporada (ou da série, se não houver). */
+  posterFor(showId: number, season: number) {
+    const s = this.showById().get(showId);
+    return s?.season_posters?.[String(season)] ?? s?.poster_path ?? null;
+  }
+
   /** Atualiza episódios das séries seguidas ainda em emissão (corre ao abrir a app). */
   async syncFollowed() {
     const cutoff = Date.now() - SYNC_HOURS * 3600_000;
     const stale = this.shows().filter(s => s.followed
       && !['Ended', 'Canceled'].includes(s.status ?? '')
       && (!s.last_synced_at || new Date(s.last_synced_at).getTime() < cutoff));
-    if (!stale.length) return;
+    // séries antigas sem posters de temporada: só a ficha da série, uma vez (não os episódios)
+    const noPosters = this.shows().filter(s => !s.season_posters && !stale.includes(s));
+    if (!stale.length && !noPosters.length) return;
     this.syncing.set(true);
     try {
+      for (const s of noPosters) {
+        const { seasons, ...show } = await this.tmdb.show(s.tmdb_id);
+        await this.sb.from('shows').update({ season_posters: show.season_posters }).eq('tmdb_id', s.tmdb_id);
+      }
       for (const s of stale) {
         const { seasons, ...show } = await this.tmdb.show(s.tmdb_id);
         await this.sb.from('shows').update({ ...show, last_synced_at: new Date().toISOString() }).eq('tmdb_id', s.tmdb_id);

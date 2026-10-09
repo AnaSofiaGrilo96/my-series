@@ -42,6 +42,7 @@ export class TmdbService {
       episode_run_time: d.episode_run_time?.[0] ?? d.last_episode_to_air?.runtime ?? null,
       genres: d.genres?.map((g: any) => g.name) ?? [],
       networks: d.networks?.map((n: any) => n.name) ?? [],
+      season_posters: Object.fromEntries((d.seasons ?? []).map((s: any) => [String(s.season_number), s.poster_path ?? null])),
       seasons: d.seasons ?? [],
     };
   }

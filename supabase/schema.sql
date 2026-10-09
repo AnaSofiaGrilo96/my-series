@@ -12,6 +12,7 @@ create table if not exists shows (
   episode_run_time integer,            -- minutos (média)
   genres           text[],
   networks         text[],
+  season_posters   jsonb,               -- { "1": "/poster.jpg", "2": ... } poster de cada temporada (TMDB)
   followed         boolean not null default true,
   favorite         boolean not null default false,
   added_at         timestamptz not null default now(),

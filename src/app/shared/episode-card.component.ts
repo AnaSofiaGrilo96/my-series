@@ -48,6 +48,6 @@ export class EpisodeCardComponent {
   constructor() { effect(() => { this.watched(); this.pending.set(false); }); }
 
   showName = computed(() => this.lib.showById().get(this.showId())?.name ?? '');
-  poster = computed(() => IMG.poster(this.lib.showById().get(this.showId())?.poster_path));
+  poster = computed(() => IMG.poster(this.lib.posterFor(this.showId(), this.season())));
   pad = (n: number) => String(n).padStart(2, '0');
 }
