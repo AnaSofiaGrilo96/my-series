@@ -147,3 +147,4 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
 - 2026-10-09 — Ícone e nome da app (manifest, favicon, apple-touch-icon); correção YAML do workflow.
 - 2026-10-09 — Barra de estado e ordenação em "Todas as séries"; Lista para ver dividida em "A acompanhar" / "Há algum tempo sem ver"
   (vista `next_to_watch` com `last_watched_at` e `last_watched_air_date`); scroll correto nas duas abas.
+- 2026-10-13 — Correção: barra de estado dos posters deixava de ficar por baixo do menu inferior ao fazer scroll (`.tabbar` sem z-index).

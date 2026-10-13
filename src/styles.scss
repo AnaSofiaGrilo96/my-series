@@ -14,7 +14,7 @@ input { font: inherit; }
 .page { min-height: 100dvh; padding-bottom: calc(var(--tabbar) + var(--safe-bottom)); }
 
 .tabbar {
-  position: fixed; left: 0; right: 0; bottom: 0; height: calc(var(--tabbar) + var(--safe-bottom));
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; height: calc(var(--tabbar) + var(--safe-bottom));
   padding-bottom: var(--safe-bottom); display: flex; background: var(--bg); border-top: 1px solid var(--line);
   a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--muted); font-size: 12px; transition: color .2s;
       svg { width: 26px; height: 26px; transition: transform .2s; } &.on { color: var(--accent); svg { transform: translateY(-2px) scale(1.08); } } }
