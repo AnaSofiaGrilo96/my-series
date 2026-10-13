@@ -13,8 +13,9 @@
   mudou e onde, e indicar os passos que ficam para ela (SQL no Supabase, commit, etc.). Nada de listas longas.
 - Quando um pedido é ambíguo, implementar a interpretação mais provável e dizer explicitamente qual foi e qual seria a
   alternativa — ela corrige no pedido seguinte (ex.: "Brevemente só a próxima estreia" → afinal queria todos os episódios e o scroll no topo).
-- Ela testa com `ng serve` e faz o commit/push ela própria (o `.git` não é visível a partir da ligação do Cowork).
-  Dar sempre a mensagem de commit pronta e a lista de ficheiros que devem aparecer no `git status`.
+- Ela testa com `ng serve`. O commit é feito **sempre automaticamente** no fim de cada alteração, a partir do Cowork (device_bash):
+  pedir primeiro permissão de apagar na pasta (o git precisa de remover `.git/*.lock` e `tmp_obj_*`), usar o autor do último commit
+  (`git log -1 --format='%an <%ae>'`), mensagem em pt-PT, e só adicionar os ficheiros tocados. O push fica para ela.
 - Prefere decisões explicadas com o "porquê" (ex.: porque é que uma série ficou numa lista) e constantes afináveis em vez de números espalhados.
 
 ## Regras do projeto
