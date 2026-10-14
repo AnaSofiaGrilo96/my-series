@@ -60,6 +60,7 @@ button:active, .grid a:active { transform: scale(.94); transition: transform .08
     &:active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); } }
   .code { font-size: 20px; font-weight: 800; margin-top: 2px; small { font-size: 13px; color: var(--muted); font-weight: 700; margin-left: 4px; } }
   .title { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .when { color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .04em; margin-top: 2px; }
   .check { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); flex: none;
     &.done { background: var(--ok); color: #fff; } svg { width: 22px; height: 22px; } }
   &.past { opacity: .6; }

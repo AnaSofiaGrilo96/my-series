@@ -6,15 +6,21 @@ export interface Show {
   /** poster por temporada: { "1": "/x.jpg" } */
   season_posters?: Record<string, string | null> | null;
   followed: boolean; favorite: boolean; added_at?: string; last_synced_at?: string | null;
+  /** id no TVmaze (fonte da hora); null = ainda não procurado, 0 = não existe lá */
+  tvmaze_id?: number | null;
 }
 export interface Episode {
   tmdb_id: number; show_id: number; season: number; number: number;
   name?: string | null; air_date?: string | null; runtime?: number | null;
   overview?: string | null; still_path?: string | null;
+  /** instante de emissão (TVmaze), ISO; null = só se conhece o dia */
+  air_at?: string | null;
+  /** instante em que fica disponível: `air_at` ou as 00:00 de Lisboa de `air_date` (vista `episode_releases`, só leitura) */
+  release_at?: string | null;
 }
 export interface NextToWatch {
   show_id: number; episode_id: number; season: number; number: number;
-  name?: string | null; air_date?: string | null; runtime?: number | null; remaining: number;
+  name?: string | null; air_date?: string | null; release_at?: string | null; runtime?: number | null; remaining: number;
   last_watched_at?: string | null; last_watched_air_date?: string | null;
 }
 export interface WatchedRow { episode_id: number; show_id: number; watched_at: string; }

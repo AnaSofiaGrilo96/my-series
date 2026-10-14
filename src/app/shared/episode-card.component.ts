@@ -17,6 +17,7 @@ import { tap } from './confetti';
           @if (remaining() > 1) { <small>+{{ remaining() - 1 }}</small> }
         </div>
         <div class="title">{{ title() || subtitle() }}</div>
+        @if (when()) { <div class="when">{{ when() }}</div> }
       </div>
       <button class="check" [class.done]="shownDone()" [class.pop]="pending()" (click)="onToggle()" [attr.aria-label]="watched() ? 'Desmarcar' : 'Marcar como visto'">
         <svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -31,6 +32,8 @@ export class EpisodeCardComponent {
   number = input.required<number>();
   title = input<string | null | undefined>();
   subtitle = input<string>('');
+  /** hora de lançamento já formatada (ex.: "21:00"); vazio = desconhecida */
+  when = input<string>('');
   remaining = input(0);
   watched = input(false);
   /** posição na lista, para o escalonamento da animação de entrada */

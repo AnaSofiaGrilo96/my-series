@@ -26,10 +26,13 @@
 - Temporada 0 (especiais) fica sempre fora de listas e contagens.
 - As datas `watched_at` anteriores a `MIGRATION_DATE` vieram da migração e são todas iguais: nunca as usar como indicador de hábito.
 - Em listas com scroll automático lembrar que `.toptabs` é sticky (compensar a altura).
+- Datas/horas: a app lê episódios da vista `episode_releases` (tem `release_at`) e nunca compara `air_date` com "hoje" — comparar sempre
+  `release_at` com `now()`/`Date.now()`. Horas mostradas sempre em hora de Lisboa via `shared/time.ts` (Intl, `Europe/Lisbon`).
 - A pasta `local/` e as outras apps dela (`associacao-fotografarte`, `MyFinances`) vivem em `Documents/My Apps`; só a MySeries está ligada ao Cowork.
 
 ## Ao terminar uma alteração
 - `npx tsc -p tsconfig.app.json --noEmit` tem de passar (correr na máquina dela via device_bash; a rede dessa VM não chega ao Supabase/TMDB,
-  por isso não dá para testar chamadas reais daqui).
+  por isso não dá para testar chamadas reais daqui). `ng build` não corre nessa VM (o esbuild do `node_modules` é o binário Windows) —
+  os templates só são validados pelo `ng serve` dela.
 - Atualizar `SPEC.md` (secções afetadas + histórico de alterações) e `README.md` se a estrutura/como-funciona mudou.
 - Ficheiros temporários: não é possível apagar a partir do Cowork; não os criar dentro do projeto (usar `$HOME` fora de `mnt/`).

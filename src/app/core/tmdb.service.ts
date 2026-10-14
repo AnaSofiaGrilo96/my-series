@@ -47,6 +47,11 @@ export class TmdbService {
     };
   }
 
+  /** Ids externos (IMDb, TVDB) — servem para encontrar a série no TVmaze. */
+  externalIds(id: number) {
+    return this.get<{ imdb_id?: string | null; tvdb_id?: number | null }>(`/tv/${id}/external_ids`);
+  }
+
   /** Todos os episódios de todas as temporadas. */
   async episodes(showId: number, seasonNumbers: number[]): Promise<Episode[]> {
     const seasons = await Promise.all(seasonNumbers.map(n => this.get<any>(`/tv/${showId}/season/${n}`)));

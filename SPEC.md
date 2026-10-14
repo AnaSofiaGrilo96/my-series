@@ -1,13 +1,13 @@
 # MySeries — especificação funcional
 
 Documento de referência do que a app faz hoje. Atualizar sempre que o comportamento mudar
-(é daqui que se parte em cada nova alteração). Última revisão: 2026-10-09.
+(é daqui que se parte em cada nova alteração). Última revisão: 2026-10-14.
 
 ## 1. Objetivo e contexto
 - App pessoal, de um único utilizador, para gerir séries: o que já viu, o que está a ver, o que vai estrear.
 - Design: menu em baixo, abas "Lista para ver" e "Brevemente", perfil com estatísticas e grelhas de posters.
 - Dados do utilizador vivem no Supabase (Postgres + Auth). Metadados, pesquisa, posters e episódios vêm do TMDB
-  (em `pt-PT`). Os dados históricos foram importados uma vez por um script local
+  (em `pt-PT`); a **hora** de emissão de cada episódio vem do TVmaze (o TMDB só tem o dia). Os dados históricos foram importados uma vez por um script local
   (em `local/`, fora do repo). **As datas `watched_at` dessa importação são todas do mesmo dia**
   e não refletem o hábito real — ver §5.3.
 
@@ -16,6 +16,8 @@ Documento de referência do que a app faz hoje. Atualizar sempre que o comportam
   aba ativa, item ativo da barra de baixo, seta da temporada aberta, códigos de episódio, botões principais).
 - Supabase JS v2; sessão por email + palavra-passe. RLS: tudo permitido a `authenticated`, nada a anónimos.
 - TMDB API v3 com *API Read Access Token* (Bearer). Imagens: poster `w342`, backdrop `w780`, still `w300`.
+- TVmaze API (sem chave, ~20 pedidos/10 s — o `TvmazeService` espaça os pedidos 550 ms e repete após 429): `lookup/shows?imdb=|thetvdb=`
+  para encontrar a série a partir dos ids externos do TMDB, e `shows/{id}/episodes` para o `airstamp` (instante com fuso do canal).
 - Deploy: push em `main` → GitHub Actions escreve `environment.ts` a partir dos *secrets* (`SUPABASE_URL`,
   `SUPABASE_ANON_KEY`, `TMDB_TOKEN`), `ng build --base-href /<repo>/`, copia `index.html` → `404.html`, publica em GitHub Pages.
 - Identidade: ícone "ecrã com visto" (fundo amarelo `#ffd400`, televisor preto com ✓ amarelo), fonte em `public/icons/icon.svg`;
@@ -25,13 +27,17 @@ Documento de referência do que a app faz hoje. Atualizar sempre que o comportam
 ## 3. Modelo de dados (Supabase, `supabase/schema.sql`)
 | Tabela | Chave | Campos relevantes |
 |---|---|---|
-| `shows` | `tmdb_id` | `name`, `original_name`, `poster_path`, `backdrop_path`, `overview`, `status` (texto TMDB: Returning Series / Ended / Canceled / In Production / Planned), `first_air_date`, `episode_run_time`, `genres[]`, `networks[]`, `season_posters` (jsonb `{"1": "/x.jpg"}`, poster por temporada), `followed` (default true), `favorite` (default false), `added_at`, `last_synced_at` |
-| `episodes` | `tmdb_id` | `show_id` → shows (cascade), `season`, `number`, `name`, `air_date`, `runtime`, `overview`, `still_path`; único `(show_id, season, number)` |
+| `shows` | `tmdb_id` | `name`, `original_name`, `poster_path`, `backdrop_path`, `overview`, `status` (texto TMDB: Returning Series / Ended / Canceled / In Production / Planned), `first_air_date`, `episode_run_time`, `genres[]`, `networks[]`, `season_posters` (jsonb `{"1": "/x.jpg"}`, poster por temporada), `followed` (default true), `favorite` (default false), `added_at`, `last_synced_at`, `tvmaze_id` (null = ainda não procurado, 0 = não existe no TVmaze) |
+| `episodes` | `tmdb_id` | `show_id` → shows (cascade), `season`, `number`, `name`, `air_date`, `air_at` (instante de emissão do TVmaze; null = só se sabe o dia), `runtime`, `overview`, `still_path`; único `(show_id, season, number)` |
 | `watched` | `episode_id` → episodes (cascade) | `show_id`, `watched_at` (default now) |
 
+Função `release_at(air_at, air_date)`: instante em que o episódio fica disponível — `air_at` ou, se não houver, **as 00:00 de Lisboa**
+do `air_date` (`at time zone 'Europe/Lisbon'`; é o Postgres que trata do UTC/UTC+1). É a única referência ao fuso no servidor.
+
 Vistas:
-- `next_to_watch` — por série **seguida**, o primeiro episódio já emitido (`air_date <= hoje`, `season > 0`) e não visto.
-  Colunas: `show_id, episode_id, season, number, name, air_date, runtime, remaining` (nº de episódios emitidos por ver),
+- `episode_releases` — `episodes` + `release_at`. A app **lê** episódios daqui (Brevemente, página da série, ✓ de temporada) e escreve em `episodes`.
+- `next_to_watch` — por série **seguida**, o primeiro episódio já lançado (`release_at <= now()`, `season > 0`) e não visto.
+  Colunas: `show_id, episode_id, season, number, name, air_date, release_at, runtime, remaining` (nº de episódios lançados por ver),
   `last_watched_at` (data em que viu o último episódio da série), `last_watched_air_date` (data de emissão desse episódio).
 - `stats` — `episodes_watched`, `minutes_watched` (runtime do episódio, senão da série, senão 45), `shows_followed`,
   `shows_favorite`, `shows_ended`, `shows_canceled`, `shows_completed` (seguidas, Ended/Canceled e sem nada por ver).
@@ -78,13 +84,17 @@ Ao abrir qualquer página, se a biblioteca ainda não carregou, `loadAll()`; na 
      b) está em dia com uma série em emissão: `last_watched_air_date` há menos de `CURRENT_AIR_DAYS` (90) dias
         e `remaining <= CURRENT_MAX_REMAINING` (3).
    - **Há algum tempo sem ver** — as restantes, incluindo séries seguidas mas nunca começadas.
-   Dentro de cada secção a ordem é a da vista (`air_date` do próximo episódio, ascendente).
+   Dentro de cada secção a ordem é a da vista (`release_at` do próximo episódio, ascendente).
+   Um episódio só entra aqui **quando chega a hora de lançamento** (não à meia-noite do dia, se a hora for conhecida). Com a app aberta,
+   um temporizador (`scheduleReleaseCheck`, no máximo de hora a hora) recarrega as listas quando o próximo lançamento acontece.
    Se não houver nada por ver: "Tudo visto".
    O ✓ marca o episódio como visto (`watched_at = agora`) e recarrega next/histórico/stats.
 
 **Brevemente**
-Todos os episódios futuros (`air_date > hoje`) das séries seguidas, até 200, agrupados por dia
-("quinta-feira, 29 outubro"), da data mais próxima para a mais distante. Ao mudar para esta aba o scroll vai ao topo.
+Todos os episódios ainda não lançados (`release_at > agora`) das séries seguidas, até 200, agrupados pelo dia **em hora de Lisboa**
+("quinta-feira, 29 de outubro"), do mais próximo para o mais distante; cada cartão mostra a hora de Lisboa (ex.: `02:00`) quando é
+conhecida (`air_at`), nada quando só se sabe o dia. Formatação com `Intl` e `timeZone: 'Europe/Lisbon'` (`shared/time.ts`), por isso a
+mudança de hora (UTC ↔ UTC+1) é automática e as horas são sempre as de Lisboa mesmo com o telemóvel noutro fuso. Ao mudar para esta aba o scroll vai ao topo.
 O ✓ também existe (marca como visto). Vazio: "Nada agendado".
 
 **Cartão de episódio** (`app-episode-card`): poster da **temporada** do episódio (`season_posters`, senão o da série), nome da série em *pill* (link para a página da série), `Sxx | Exx` (+N), título, botão ✓.
@@ -100,8 +110,8 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
   se está, **A seguir ✓ / Seguir** (toggle `followed`) e **Remover**.
 - Abas **Sobre** (géneros, duração, sinopse) e **Episódios** (só se a série está na biblioteca): acordeão por temporada, cada cabeçalho com
   poster da temporada (TMDB, em runtime, não guardado), "Temporada N", `vistos/emitidos` (+ "N por estrear") e seta que roda ao abrir;
-  cada episódio em linha larga com imagem (`still_path`), código `S01 E01` em amarelo, título por baixo e data (`d MMM yyyy`);
-  episódios futuros a 45% e sem ✓.
+  cada episódio em linha larga com imagem (`still_path`), código `S01 E01` em amarelo, título por baixo e data (`29 out 2026`, com
+  ` · 21:00` em hora de Lisboa quando a hora é conhecida); episódios ainda não lançados (`release_at` no futuro) a 45% e sem ✓.
   Cada temporada com episódios emitidos tem o seu próprio ✓ no cabeçalho: verde quando todos os emitidos estão vistos; tocar marca
   todos os emitidos dessa temporada (só dessa) como vistos, ou desmarca todos se já estava completa (`setSeasonWatched`, otimista, confetis ao marcar).
   (`markUpTo`, que marca até um episódio inclusive e todos os anteriores, continua no serviço mas sem botão na UI.)
@@ -122,9 +132,12 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
   episódio por ver de uma temporada (o próximo por ver passa a ser de outra temporada, ou não há), ou na página da série ao marcar o último
   episódio emitido da temporada / ✓ da temporada.
 
-## 6. Sincronização com o TMDB (`syncFollowed`)
+## 6. Sincronização com o TMDB e TVmaze (`syncFollowed`)
 Ao abrir a página Séries: para cada série seguida cujo `status` não seja Ended/Canceled e com `last_synced_at` há mais de
-12 h (ou nulo), volta a buscar a série e todos os episódios ao TMDB e faz upsert. Séries sem `season_posters` (anteriores à coluna)
+12 h (ou nulo), volta a buscar a série e todos os episódios ao TMDB e faz upsert. Na mesma passagem (e ao seguir uma série nova):
+se `tvmaze_id` ainda é null, procura a série no TVmaze pelos ids externos do TMDB (IMDb, depois TVDB) e guarda o id (0 se não existir —
+não volta a procurar); se existe, vai buscar os `airstamp` dos episódios e grava `air_at` nos que têm hora (emparelhados por temporada+número;
+os restantes ficam a null → 00:00 de Lisboa). Falhas do TVmaze não impedem a sincronização do TMDB. Séries sem `season_posters` (anteriores à coluna)
 recebem só a ficha da série, uma vez. Sinal `syncing` durante o processo.
 Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a aparecer no Brevemente.
 
@@ -148,3 +161,6 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
 - 2026-10-09 — Barra de estado e ordenação em "Todas as séries"; Lista para ver dividida em "A acompanhar" / "Há algum tempo sem ver"
   (vista `next_to_watch` com `last_watched_at` e `last_watched_air_date`); scroll correto nas duas abas.
 - 2026-10-13 — Correção: barra de estado dos posters deixava de ficar por baixo do menu inferior ao fazer scroll (`.tabbar` sem z-index).
+- 2026-10-14 — Hora de lançamento dos episódios (TVmaze → `episodes.air_at`, `shows.tvmaze_id`; função `release_at` e vista `episode_releases`;
+  `next_to_watch`/`stats` por instante em vez de dia). Lista para ver só a partir da hora; Brevemente e página da série mostram a hora de Lisboa.
+  Correr `supabase/2026-10-14-hora-de-lancamento.sql`.

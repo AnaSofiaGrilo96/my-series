@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Episode, NextToWatch, Show, Stats, WatchedRow } from './models';
 import { SupabaseService } from './supabase.service';
 import { TmdbService } from './tmdb.service';
+import { TVMAZE_NOT_FOUND, TvmazeService } from './tvmaze.service';
 
 const SYNC_HOURS = 12;
 /** Série "a acompanhar": viu algum episódio nos últimos N dias... */
@@ -11,6 +12,8 @@ export const CURRENT_AIR_DAYS = 90;
 export const CURRENT_MAX_REMAINING = 3;
 /** Visualizações registadas antes desta data vieram da migração (todas no mesmo dia) e não dizem nada sobre o hábito. */
 export const MIGRATION_DATE = '2026-10-09';
+/** Intervalo máximo entre verificações de "já chegou a hora de algum episódio?" com a app aberta. */
+const RELEASE_CHECK_MAX_MS = 3600_000;
 export type HistoryRow = WatchedRow & { episode: Episode };
 export type EpisodeWithWatched = Episode & { watched: boolean };
 export type ShowState = 'pending' | 'ended' | 'done';
@@ -19,6 +22,8 @@ export type ShowState = 'pending' | 'ended' | 'done';
 export class LibraryService {
   private sb = inject(SupabaseService).client;
   private tmdb = inject(TmdbService);
+  private tvmaze = inject(TvmazeService);
+  private releaseTimer: any;
 
   readonly shows = signal<Show[]>([]);
   readonly next = signal<NextToWatch[]>([]);
@@ -59,16 +64,25 @@ export class LibraryService {
     this.shows.set((data ?? []) as Show[]);
   }
   async loadNext() {
-    const { data } = await this.sb.from('next_to_watch').select('*').order('air_date');
+    const { data } = await this.sb.from('next_to_watch').select('*').order('release_at');
     this.next.set((data ?? []) as NextToWatch[]);
   }
+  /** Episódios ainda não lançados (instante de lançamento > agora, calculado na BD em hora de Lisboa). */
   async loadUpcoming() {
-    const today = new Date().toISOString().slice(0, 10);
     const followed = this.shows().filter(s => s.followed).map(s => s.tmdb_id);
     if (!followed.length) { this.upcoming.set([]); return; }
-    const { data } = await this.sb.from('episodes').select('*')
-      .in('show_id', followed).gt('air_date', today).gt('season', 0).order('air_date').limit(200);
+    const { data } = await this.sb.from('episode_releases').select('*')
+      .in('show_id', followed).gt('release_at', new Date().toISOString()).gt('season', 0).order('release_at').limit(200);
     this.upcoming.set((data ?? []) as Episode[]);
+    this.scheduleReleaseCheck();
+  }
+  /** Quando o próximo lançamento acontecer com a app aberta, passa do Brevemente para a Lista para ver sem recarregar. */
+  private scheduleReleaseCheck() {
+    clearTimeout(this.releaseTimer);
+    const next = this.upcoming()[0]?.release_at;
+    if (!next) return;
+    const ms = Math.min(Math.max(new Date(next).getTime() - Date.now(), 1000) + 2000, RELEASE_CHECK_MAX_MS);
+    this.releaseTimer = setTimeout(() => Promise.all([this.loadNext(), this.loadUpcoming(), this.loadStats()]), ms);
   }
   async loadHistory(limit = 80) {
     const { data } = await this.sb.from('watched').select('*, episode:episodes(*)')
@@ -84,16 +98,32 @@ export class LibraryService {
   async addShow(tmdbId: number) {
     const existing = this.showById().get(tmdbId);
     const { seasons, ...show } = await this.tmdb.show(tmdbId);
+    const tvmaze_id = await this.resolveTvmaze(tmdbId, existing?.tvmaze_id);
     const row: Show = {
       ...show,
       followed: true,
       favorite: existing?.favorite ?? false,   // coluna legada, já não usada na UI
       last_synced_at: new Date().toISOString(),
+      tvmaze_id,
     };
     await this.sb.from('shows').upsert(row);
-    const eps = await this.tmdb.episodes(tmdbId, seasons.map(s => s.season_number));
-    if (eps.length) await this.sb.from('episodes').upsert(eps, { onConflict: 'tmdb_id' });
+    await this.upsertEpisodes(tmdbId, seasons.map(s => s.season_number), tvmaze_id);
     await this.loadAll();
+  }
+  /** Id TVmaze da série: o já guardado, ou procura-o pelos ids externos do TMDB (0 = não existe; não volta a procurar). */
+  private async resolveTvmaze(tmdbId: number, current?: number | null): Promise<number> {
+    if (current != null) return current;
+    try { return await this.tvmaze.lookup(await this.tmdb.externalIds(tmdbId)); }
+    catch { return TVMAZE_NOT_FOUND; }
+  }
+  /** Episódios do TMDB + hora de emissão do TVmaze (quando a série lá existe e o episódio tem hora), gravados em `episodes`. */
+  private async upsertEpisodes(tmdbId: number, seasonNumbers: number[], tvmazeId?: number | null) {
+    const eps = await this.tmdb.episodes(tmdbId, seasonNumbers);
+    if (!eps.length) return;
+    let stamps = new Map<string, string>();
+    if (tvmazeId) { try { stamps = await this.tvmaze.airstamps(tvmazeId); } catch { /* sem hora desta vez; fica a do dia */ } }
+    const rows = eps.map(e => ({ ...e, air_at: stamps.get(`${e.season}-${e.number}`) ?? null }));
+    await this.sb.from('episodes').upsert(rows, { onConflict: 'tmdb_id' });
   }
   async setFollowed(tmdbId: number, followed: boolean) {
     await this.sb.from('shows').update({ followed }).eq('tmdb_id', tmdbId);
@@ -124,8 +154,7 @@ export class LibraryService {
   }
   /** Marca (ou desmarca) como vistos todos os episódios já emitidos de uma temporada. */
   async setSeasonWatched(showId: number, season: number, watched: boolean) {
-    const today = new Date().toISOString().slice(0, 10);
-    const { data } = await this.sb.from('episodes').select('tmdb_id').eq('show_id', showId).eq('season', season).lte('air_date', today);
+    const { data } = await this.sb.from('episode_releases').select('tmdb_id').eq('show_id', showId).eq('season', season).lte('release_at', new Date().toISOString());
     const ids = (data ?? []).map(e => e.tmdb_id);
     if (!ids.length) return;
     if (watched) {
@@ -163,9 +192,9 @@ export class LibraryService {
       }
       for (const s of stale) {
         const { seasons, ...show } = await this.tmdb.show(s.tmdb_id);
-        await this.sb.from('shows').update({ ...show, last_synced_at: new Date().toISOString() }).eq('tmdb_id', s.tmdb_id);
-        const eps = await this.tmdb.episodes(s.tmdb_id, seasons.map(x => x.season_number));
-        if (eps.length) await this.sb.from('episodes').upsert(eps, { onConflict: 'tmdb_id' });
+        const tvmaze_id = await this.resolveTvmaze(s.tmdb_id, s.tvmaze_id);
+        await this.sb.from('shows').update({ ...show, last_synced_at: new Date().toISOString(), tvmaze_id }).eq('tmdb_id', s.tmdb_id);
+        await this.upsertEpisodes(s.tmdb_id, seasons.map(x => x.season_number), tvmaze_id);
       }
       await this.loadAll();
     } finally { this.syncing.set(false); }
@@ -173,7 +202,7 @@ export class LibraryService {
 
   async episodesOf(showId: number): Promise<EpisodeWithWatched[]> {
     const [{ data: eps }, { data: w }] = await Promise.all([
-      this.sb.from('episodes').select('*').eq('show_id', showId).order('season').order('number'),
+      this.sb.from('episode_releases').select('*').eq('show_id', showId).order('season').order('number'),
       this.sb.from('watched').select('episode_id').eq('show_id', showId),
     ]);
     const watched = new Set((w ?? []).map(x => x.episode_id));

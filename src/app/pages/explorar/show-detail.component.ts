@@ -1,12 +1,13 @@
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
-import { DatePipe, Location } from '@angular/common';
+import { Location } from '@angular/common';
 import { EpisodeWithWatched, LibraryService } from '../../core/library.service';
 import { IMG, ShowDetail, TmdbService } from '../../core/tmdb.service';
 import { confetti, tap } from '../../shared/confetti';
+import { dayShort, hourOf } from '../../shared/time';
 
 @Component({
   selector: 'app-show-detail',
-  imports: [DatePipe],
+  imports: [],
   template: `
     <button class="back" (click)="loc.back()" aria-label="Voltar">←</button>
     @if (!detail()) { <div class="spinner"></div> }
@@ -60,14 +61,14 @@ import { confetti, tap } from '../../shared/confetti';
             </div>
             @if (open() === s.season) {
               @for (e of s.items; track e.tmdb_id; let i = $index) {
-                <div class="row fade-in" [class.future]="isFuture(e.air_date)" [style.--i]="i">
+                <div class="row fade-in" [class.future]="isFuture(e)" [style.--i]="i">
                   @if (e.still_path) { <img class="still" [src]="still(e.still_path)" alt="" loading="lazy" /> } @else { <div class="still noimg"></div> }
                   <div class="body">
                     <div class="code">S{{ pad(e.season) }} E{{ pad(e.number) }}</div>
                     <div class="t">{{ e.name || 'Sem título' }}</div>
-                    <div class="d">{{ e.air_date ? (e.air_date | date:'d MMM yyyy':'':'pt-PT') : 'Sem data' }}</div>
+                    <div class="d">{{ dateOf(e) }}</div>
                   </div>
-                  @if (!isFuture(e.air_date)) {
+                  @if (!isFuture(e)) {
                     <button class="check" [class.done]="e.watched" [class.pop]="e.watched && justToggled() === e.tmdb_id" (click)="toggleEp(e)" [attr.aria-label]="e.watched ? 'Desmarcar' : 'Marcar como visto'">
                       <svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
@@ -122,7 +123,7 @@ export class ShowDetailComponent {
     const map = new Map<number, EpisodeWithWatched[]>();
     for (const e of this.episodes()) { if (e.season === 0) continue; (map.get(e.season) ?? map.set(e.season, []).get(e.season))!.push(e); }
     return [...map.entries()].map(([season, items]) => ({
-      season, items, aired: items.filter(i => !this.isFuture(i.air_date)).length, watched: items.filter(i => i.watched).length,
+      season, items, aired: items.filter(i => !this.isFuture(i)).length, watched: items.filter(i => i.watched).length,
     }));
   });
 
@@ -130,7 +131,11 @@ export class ShowDetailComponent {
     effect(() => { const id = +this.id(); this.tmdb.show(id).then(d => this.detail.set(d)); this.reloadEpisodes(); });
     if (!this.lib.loaded()) this.lib.loadAll();
   }
-  isFuture = (d?: string | null) => !d || d > new Date().toISOString().slice(0, 10);
+  /** Ainda não lançado: sem data, ou instante de lançamento (hora do TVmaze ou 00:00 de Lisboa do dia) no futuro. */
+  isFuture = (e: { release_at?: string | null }) => !e.release_at || new Date(e.release_at).getTime() > Date.now();
+  /** "29 out 2026" ou, com hora conhecida, "29 out 2026 · 21:00" (hora de Lisboa). */
+  dateOf = (e: { release_at?: string | null; air_at?: string | null }) =>
+    !e.release_at ? 'Sem data' : dayShort(e.release_at) + (e.air_at ? ` · ${hourOf(e.air_at)}` : '');
   pad = (n: number) => String(n).padStart(2, '0');
   still = IMG.still;
   seasonPoster = (n: number) => IMG.poster(this.detail()?.seasons.find(s => s.season_number === n)?.poster_path);
@@ -160,7 +165,7 @@ export class ShowDetailComponent {
   async toggleSeason(s: { season: number; aired: number; watched: number }) {
     tap();
     const mark = s.watched !== s.aired;
-    this.episodes.update(list => list.map(x => x.season === s.season && !this.isFuture(x.air_date) ? { ...x, watched: mark } : x));
+    this.episodes.update(list => list.map(x => x.season === s.season && !this.isFuture(x) ? { ...x, watched: mark } : x));
     this.justSeason.set(mark ? s.season : null);
     if (mark) confetti({ count: 220 });
     try { await this.lib.setSeasonWatched(+this.id(), s.season, mark); } finally { await this.reloadEpisodes(); }

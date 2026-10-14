@@ -1,12 +1,12 @@
 # MySeries
 
 App pessoal (PWA, Angular 19) para gerir séries: o que já vi, o que estou a ver e o que vai estrear.
-Dados próprios no Supabase; metadados, pesquisa e episódios vêm do TMDB.
+Dados próprios no Supabase; metadados, pesquisa e episódios vêm do TMDB; a hora de emissão vem do TVmaze.
 
 ## Estrutura
 - `supabase/schema.sql` — tabelas `shows`, `episodes`, `watched` + vistas `next_to_watch` e `stats`. Correr uma vez.
   Alterações posteriores ao schema ficam em ficheiros datados na mesma pasta (ex.: `2026-10-09-next-to-watch-last-watched.sql`), a correr por ordem.
-- `src/app/core` — `supabase.service` (auth), `tmdb.service` (API), `library.service` (listas, vistos, sincronização).
+- `src/app/core` — `supabase.service` (auth), `tmdb.service` (API), `tvmaze.service` (hora de emissão), `library.service` (listas, vistos, sincronização).
 - `src/app/pages` — `series` (Lista para ver / Brevemente), `explorar` (pesquisa + detalhe da série), `perfil` (estatísticas e grelha das séries), `login`.
 - `local/` — scripts locais (migração). **Não vai para o repo.**
 - `.github/workflows/deploy.yml` — build e deploy automático para GitHub Pages (chaves vêm dos *secrets*).

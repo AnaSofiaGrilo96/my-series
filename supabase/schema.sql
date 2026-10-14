@@ -16,7 +16,8 @@ create table if not exists shows (
   followed         boolean not null default true,
   favorite         boolean not null default false,
   added_at         timestamptz not null default now(),
-  last_synced_at   timestamptz
+  last_synced_at   timestamptz,
+  tvmaze_id        integer              -- null = ainda não procurado; 0 = não existe no TVmaze
 );
 
 create table if not exists episodes (
@@ -26,6 +27,7 @@ create table if not exists episodes (
   number     integer not null,
   name       text,
   air_date   date,
+  air_at     timestamptz,                -- instante de emissão (TVmaze); null = desconhecido
   runtime    integer,
   overview   text,
   still_path text,
@@ -41,19 +43,28 @@ create table if not exists watched (
 );
 create index if not exists watched_at_idx on watched(watched_at desc);
 
+-- Instante em que um episódio fica disponível: a hora do TVmaze ou, se não houver, as 00:00 de Lisboa do dia de emissão.
+-- (Única referência a Europe/Lisboa: a conversão UTC/UTC+1 é feita pelo Postgres.)
+create or replace function release_at(air_at timestamptz, air_date date) returns timestamptz
+language sql stable as $$ select coalesce(air_at, air_date::timestamp at time zone 'Europe/Lisbon') $$;
+
+-- Vista: episódios com o instante de lançamento calculado (a app lê daqui; escreve em `episodes`)
+create or replace view episode_releases as
+select e.*, release_at(e.air_at, e.air_date) as release_at from episodes e;
+
 -- Vista: próximo episódio por ver, por série seguida
 create or replace view next_to_watch as
 select distinct on (e.show_id)
-  e.show_id, e.tmdb_id as episode_id, e.season, e.number, e.name, e.air_date, e.runtime,
-  (select count(*) from episodes x
-     where x.show_id = e.show_id and x.air_date <= current_date and x.season > 0
+  e.show_id, e.tmdb_id as episode_id, e.season, e.number, e.name, e.air_date, e.release_at, e.runtime,
+  (select count(*) from episode_releases x
+     where x.show_id = e.show_id and x.release_at <= now() and x.season > 0
        and not exists (select 1 from watched w where w.episode_id = x.tmdb_id)) as remaining,
   (select max(w.watched_at) from watched w where w.show_id = e.show_id)       as last_watched_at,
   (select max(x.air_date) from watched w join episodes x on x.tmdb_id = w.episode_id
      where w.show_id = e.show_id)                                             as last_watched_air_date
-from episodes e
+from episode_releases e
 join shows s on s.tmdb_id = e.show_id and s.followed
-where e.air_date <= current_date and e.season > 0
+where e.release_at <= now() and e.season > 0
   and not exists (select 1 from watched w where w.episode_id = e.tmdb_id)
 order by e.show_id, e.season, e.number;
 
@@ -69,8 +80,8 @@ select
   (select count(*) from shows where status = 'Ended')                     as shows_ended,
   (select count(*) from shows where status = 'Canceled')                  as shows_canceled,
   (select count(*) from shows s where s.followed
-     and not exists (select 1 from episodes e where e.show_id = s.tmdb_id
-        and e.air_date <= current_date and e.season > 0
+     and not exists (select 1 from episode_releases e where e.show_id = s.tmdb_id
+        and e.release_at <= now() and e.season > 0
         and not exists (select 1 from watched w where w.episode_id = e.tmdb_id))
      and s.status in ('Ended','Canceled'))                                as shows_completed;
 

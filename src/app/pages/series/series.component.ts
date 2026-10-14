@@ -1,12 +1,13 @@
 import { AfterViewChecked, Component, ElementRef, computed, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { LibraryService } from '../../core/library.service';
+import { Episode } from '../../core/models';
 import { EpisodeCardComponent } from '../../shared/episode-card.component';
 import { confetti } from '../../shared/confetti';
+import { dayKey, dayLong, hourOf } from '../../shared/time';
 
 @Component({
   selector: 'app-series',
-  imports: [EpisodeCardComponent, DatePipe],
+  imports: [EpisodeCardComponent],
   template: `
     <div class="toptabs">
       <button [class.on]="tab() === 'lista'" (click)="setTab('lista')">LISTA PARA VER</button>
@@ -44,10 +45,10 @@ import { confetti } from '../../shared/confetti';
     @else {
       <div class="fade">
       @for (g of upcomingByDay(); track g.day) {
-        <div class="daylabel">{{ g.day | date:'EEEE, d MMMM':'':'pt-PT' }}</div>
+        <div class="daylabel">{{ g.label }}</div>
         @for (e of g.items; track e.tmdb_id; let i = $index) {
           <app-episode-card [showId]="e.show_id" [season]="e.season" [number]="e.number" [title]="e.name" [index]="i"
-            (toggle)="lib.markWatched(e.tmdb_id, e.show_id)" />
+            [when]="e.air_at ? hourOf(e.air_at) : ''" (toggle)="lib.markWatched(e.tmdb_id, e.show_id)" />
         }
       } @empty {
         <div class="empty"><h2>Nada agendado</h2><p>Quando as séries que segues tiverem datas de estreia, aparecem aqui.</p></div>
@@ -63,14 +64,17 @@ export class SeriesComponent implements AfterViewChecked {
   private scrolled = false;
 
   pastOldestFirst = computed(() => [...this.lib.history()].reverse());
+  hourOf = hourOf;
+  /** Brevemente agrupado pelo dia (hora de Lisboa) em que cada episódio fica disponível; a hora só se mostra quando é conhecida. */
   upcomingByDay = computed(() => {
-    const groups = new Map<string, typeof this.lib.upcoming extends () => infer T ? T : never>();
+    const groups = new Map<string, { label: string; items: Episode[] }>();
     for (const e of this.lib.upcoming()) {
-      const day = e.air_date ?? '';
-      if (!groups.has(day)) groups.set(day, []);
-      groups.get(day)!.push(e);
+      const at = e.release_at ?? '';
+      const day = at ? dayKey(at) : '';
+      if (!groups.has(day)) groups.set(day, { label: at ? dayLong(at) : 'Sem data', items: [] });
+      groups.get(day)!.items.push(e);
     }
-    return [...groups.entries()].map(([day, items]) => ({ day, items }));
+    return [...groups.entries()].map(([day, g]) => ({ day, ...g }));
   });
 
   /** Marca como visto e, se com isso a temporada ficou completa (o próximo por ver é de outra temporada ou não há), confetis. */
