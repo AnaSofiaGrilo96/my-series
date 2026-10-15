@@ -134,7 +134,7 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
 
 ## 6. Sincronização com o TMDB e TVmaze (`syncFollowed`)
 Ao abrir a página Séries: para cada série seguida cujo `status` não seja Ended/Canceled e com `last_synced_at` há mais de
-12 h (ou nulo), volta a buscar a série e todos os episódios ao TMDB e faz upsert. Na mesma passagem (e ao seguir uma série nova):
+12 h (ou nulo), **ou ainda sem `tvmaze_id`**, volta a buscar a série e todos os episódios ao TMDB e faz upsert. Na mesma passagem (e ao seguir uma série nova):
 se `tvmaze_id` ainda é null, procura a série no TVmaze pelos ids externos do TMDB (IMDb, depois TVDB) e guarda o id (0 se não existir —
 não volta a procurar); se existe, vai buscar os `airstamp` dos episódios e grava `air_at` nos que têm hora (emparelhados por temporada+número;
 os restantes ficam a null → 00:00 de Lisboa). Falhas do TVmaze não impedem a sincronização do TMDB. Séries sem `season_posters` (anteriores à coluna)

@@ -178,9 +178,10 @@ export class LibraryService {
   /** Atualiza episódios das séries seguidas ainda em emissão (corre ao abrir a app). */
   async syncFollowed() {
     const cutoff = Date.now() - SYNC_HOURS * 3600_000;
+    // sem `tvmaze_id` (null = nunca procurado): sincroniza já, para receber as horas de emissão sem esperar pelas 12 h
     const stale = this.shows().filter(s => s.followed
       && !['Ended', 'Canceled'].includes(s.status ?? '')
-      && (!s.last_synced_at || new Date(s.last_synced_at).getTime() < cutoff));
+      && (s.tvmaze_id == null || !s.last_synced_at || new Date(s.last_synced_at).getTime() < cutoff));
     // séries antigas sem posters de temporada: só a ficha da série, uma vez (não os episódios)
     const noPosters = this.shows().filter(s => !s.season_posters && !stale.includes(s));
     if (!stale.length && !noPosters.length) return;
