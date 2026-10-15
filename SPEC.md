@@ -92,8 +92,8 @@ Ao abrir qualquer página, se a biblioteca ainda não carregou, `loadAll()`; na 
 
 **Brevemente**
 Todos os episódios ainda não lançados (`release_at > agora`) das séries seguidas, até 200, agrupados pelo dia **em hora de Lisboa**
-("quinta-feira, 29 de outubro"), do mais próximo para o mais distante; cada cartão mostra a hora de Lisboa (ex.: `02:00`) quando é
-conhecida (`air_at`), nada quando só se sabe o dia. Formatação com `Intl` e `timeZone: 'Europe/Lisbon'` (`shared/time.ts`), por isso a
+("quinta-feira, 29 de outubro"), do mais próximo para o mais distante; cada cartão mostra sempre a hora de Lisboa no formato `02:00h`
+(`00:00h` quando o TVmaze não tem a hora, porque é a essa hora que o episódio entra na Lista para ver). Formatação com `Intl` e `timeZone: 'Europe/Lisbon'` (`shared/time.ts`), por isso a
 mudança de hora (UTC ↔ UTC+1) é automática e as horas são sempre as de Lisboa mesmo com o telemóvel noutro fuso. Ao mudar para esta aba o scroll vai ao topo.
 O ✓ também existe (marca como visto). Vazio: "Nada agendado".
 
@@ -110,8 +110,8 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
   se está, **A seguir ✓ / Seguir** (toggle `followed`) e **Remover**.
 - Abas **Sobre** (géneros, duração, sinopse) e **Episódios** (só se a série está na biblioteca): acordeão por temporada, cada cabeçalho com
   poster da temporada (TMDB, em runtime, não guardado), "Temporada N", `vistos/emitidos` (+ "N por estrear") e seta que roda ao abrir;
-  cada episódio em linha larga com imagem (`still_path`), código `S01 E01` em amarelo, título por baixo e data (`29 out 2026`, com
-  ` · 21:00` em hora de Lisboa quando a hora é conhecida); episódios ainda não lançados (`release_at` no futuro) a 45% e sem ✓.
+  cada episódio em linha larga com imagem (`still_path`), código `S01 E01` em amarelo, título por baixo e data com hora de Lisboa
+  (`29 out 2026 · 21:00h`; `00:00h` quando a hora não é conhecida); episódios ainda não lançados (`release_at` no futuro) a 45% e sem ✓.
   Cada temporada com episódios emitidos tem o seu próprio ✓ no cabeçalho: verde quando todos os emitidos estão vistos; tocar marca
   todos os emitidos dessa temporada (só dessa) como vistos, ou desmarca todos se já estava completa (`setSeasonWatched`, otimista, confetis ao marcar).
   (`markUpTo`, que marca até um episódio inclusive e todos os anteriores, continua no serviço mas sem botão na UI.)
@@ -164,3 +164,4 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
 - 2026-10-14 — Hora de lançamento dos episódios (TVmaze → `episodes.air_at`, `shows.tvmaze_id`; função `release_at` e vista `episode_releases`;
   `next_to_watch`/`stats` por instante em vez de dia). Lista para ver só a partir da hora; Brevemente e página da série mostram a hora de Lisboa.
   Correr `supabase/2026-10-14-hora-de-lancamento.sql`.
+- 2026-10-15 — Hora mostrada sempre, no formato `00:00h` (também quando é a meia-noite por omissão); séries sem `tvmaze_id` sincronizam logo.

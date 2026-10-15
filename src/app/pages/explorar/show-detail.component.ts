@@ -133,9 +133,8 @@ export class ShowDetailComponent {
   }
   /** Ainda não lançado: sem data, ou instante de lançamento (hora do TVmaze ou 00:00 de Lisboa do dia) no futuro. */
   isFuture = (e: { release_at?: string | null }) => !e.release_at || new Date(e.release_at).getTime() > Date.now();
-  /** "29 out 2026" ou, com hora conhecida, "29 out 2026 · 21:00" (hora de Lisboa). */
-  dateOf = (e: { release_at?: string | null; air_at?: string | null }) =>
-    !e.release_at ? 'Sem data' : dayShort(e.release_at) + (e.air_at ? ` · ${hourOf(e.air_at)}` : '');
+  /** "29 out 2026 · 21:00h" em hora de Lisboa (00:00h quando a hora não é conhecida). */
+  dateOf = (e: { release_at?: string | null }) => !e.release_at ? 'Sem data' : `${dayShort(e.release_at)} · ${hourOf(e.release_at)}`;
   pad = (n: number) => String(n).padStart(2, '0');
   still = IMG.still;
   seasonPoster = (n: number) => IMG.poster(this.detail()?.seasons.find(s => s.season_number === n)?.poster_path);

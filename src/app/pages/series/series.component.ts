@@ -48,7 +48,7 @@ import { dayKey, dayLong, hourOf } from '../../shared/time';
         <div class="daylabel">{{ g.label }}</div>
         @for (e of g.items; track e.tmdb_id; let i = $index) {
           <app-episode-card [showId]="e.show_id" [season]="e.season" [number]="e.number" [title]="e.name" [index]="i"
-            [when]="e.air_at ? hourOf(e.air_at) : ''" (toggle)="lib.markWatched(e.tmdb_id, e.show_id)" />
+            [when]="e.release_at ? hourOf(e.release_at) : ''" (toggle)="lib.markWatched(e.tmdb_id, e.show_id)" />
         }
       } @empty {
         <div class="empty"><h2>Nada agendado</h2><p>Quando as séries que segues tiverem datas de estreia, aparecem aqui.</p></div>
@@ -65,7 +65,7 @@ export class SeriesComponent implements AfterViewChecked {
 
   pastOldestFirst = computed(() => [...this.lib.history()].reverse());
   hourOf = hourOf;
-  /** Brevemente agrupado pelo dia (hora de Lisboa) em que cada episódio fica disponível; a hora só se mostra quando é conhecida. */
+  /** Brevemente agrupado pelo dia (hora de Lisboa) em que cada episódio fica disponível; mostra sempre a hora (00:00h quando é desconhecida). */
   upcomingByDay = computed(() => {
     const groups = new Map<string, { label: string; items: Episode[] }>();
     for (const e of this.lib.upcoming()) {

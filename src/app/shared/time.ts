@@ -7,8 +7,8 @@ const DAY_LONG = fmt({ weekday: 'long', day: 'numeric', month: 'long' });
 const DAY_SHORT = fmt({ day: 'numeric', month: 'short', year: 'numeric' });
 const DAY_KEY = fmt({ year: 'numeric', month: '2-digit', day: '2-digit' });
 
-/** "21:00" */
-export const hourOf = (iso: string) => HOUR.format(new Date(iso));
+/** "21:00h" */
+export const hourOf = (iso: string) => HOUR.format(new Date(iso)) + 'h';
 /** "quinta-feira, 29 de outubro" */
 export const dayLong = (iso: string) => DAY_LONG.format(new Date(iso));
 /** "29 out 2026" */

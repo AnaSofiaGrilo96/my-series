@@ -32,7 +32,7 @@ export class EpisodeCardComponent {
   number = input.required<number>();
   title = input<string | null | undefined>();
   subtitle = input<string>('');
-  /** hora de lançamento já formatada (ex.: "21:00"); vazio = desconhecida */
+  /** hora de lançamento já formatada (ex.: "21:00h"); vazio = sem data */
   when = input<string>('');
   remaining = input(0);
   watched = input(false);
