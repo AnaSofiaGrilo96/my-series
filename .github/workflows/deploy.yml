@@ -19,6 +19,7 @@ jobs:
             supabaseAnonKey: '${{ secrets.SUPABASE_ANON_KEY }}',
             tmdbToken: '${{ secrets.TMDB_TOKEN }}',
             tmdbLanguage: 'pt-PT',
+            vapidPublicKey: '${{ secrets.VAPID_PUBLIC_KEY }}',
           };
           EOT
       - run: npx ng build --base-href "/${{ github.event.repository.name }}/"

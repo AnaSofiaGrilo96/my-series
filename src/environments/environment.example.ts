@@ -3,4 +3,6 @@ export const environment = {
   supabaseAnonKey: 'COLA_AQUI_A_ANON_KEY',
   tmdbToken: 'COLA_AQUI_O_API_READ_ACCESS_TOKEN_DO_TMDB',
   tmdbLanguage: 'pt-PT',
+  /** chave pública VAPID das notificações push (a privada fica só nos secrets da Edge Function); vazio = sem notificações */
+  vapidPublicKey: '',
 };

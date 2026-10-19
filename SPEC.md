@@ -1,7 +1,7 @@
 # MySeries — especificação funcional
 
 Documento de referência do que a app faz hoje. Atualizar sempre que o comportamento mudar
-(é daqui que se parte em cada nova alteração). Última revisão: 2026-10-14.
+(é daqui que se parte em cada nova alteração). Última revisão: 2026-10-19.
 
 ## 1. Objetivo e contexto
 - App pessoal, de um único utilizador, para gerir séries: o que já viu, o que está a ver, o que vai estrear.
@@ -23,6 +23,9 @@ Documento de referência do que a app faz hoje. Atualizar sempre que o comportam
 - Identidade: ícone "ecrã com visto" (fundo amarelo `#ffd400`, televisor preto com ✓ amarelo), fonte em `public/icons/icon.svg`;
   PNGs 72–512 (maskable) + `apple-touch-icon.png` (180) + `favicon.ico` gerados a partir dele. Manifest: nome "MySeries", `theme_color`/`background_color` pretos, retrato.
 - Local: `npm start` (`ng serve`); `src/environments/environment.ts` preenchido a partir do `environment.example.ts` (ignorado pelo git).
+- Notificações: Web Push com chaves VAPID (pública em `environment.vapidPublicKey` / secret `VAPID_PUBLIC_KEY`; privada só nos secrets da Edge Function).
+  Edge Function `supabase/functions/notify-releases` (Deno, `npm:web-push`) chamada pelo pg_cron + pg_net de 5 em 5 min com `Authorization: Bearer CRON_SECRET`
+  (deploy com `--no-verify-jwt`). Instalação passo a passo no README.
 
 ## 3. Modelo de dados (Supabase, `supabase/schema.sql`)
 | Tabela | Chave | Campos relevantes |
@@ -30,6 +33,9 @@ Documento de referência do que a app faz hoje. Atualizar sempre que o comportam
 | `shows` | `tmdb_id` | `name`, `original_name`, `poster_path`, `backdrop_path`, `overview`, `status` (texto TMDB: Returning Series / Ended / Canceled / In Production / Planned), `first_air_date`, `episode_run_time`, `genres[]`, `networks[]`, `season_posters` (jsonb `{"1": "/x.jpg"}`, poster por temporada), `followed` (default true), `favorite` (default false), `added_at`, `last_synced_at`, `tvmaze_id` (null = ainda não procurado, 0 = não existe no TVmaze) |
 | `episodes` | `tmdb_id` | `show_id` → shows (cascade), `season`, `number`, `name`, `air_date`, `air_at` (instante de emissão do TVmaze; null = só se sabe o dia), `runtime`, `overview`, `still_path`; único `(show_id, season, number)` |
 | `watched` | `episode_id` → episodes (cascade) | `show_id`, `watched_at` (default now) |
+| `push_subscriptions` | `endpoint` | `subscription` (jsonb, `PushSubscription.toJSON()`), `created_at` — um registo por dispositivo |
+
+`episodes.notified_at` — quando foi enviada a notificação do lançamento (null = ainda não; a migração marca todos os já lançados).
 
 Função `release_at(air_at, air_date)`: instante em que o episódio fica disponível — `air_at` ou, se não houver, **as 00:00 de Lisboa**
 do `air_date` (`at time zone 'Europe/Lisbon'`; é o Postgres que trata do UTC/UTC+1). É a única referência ao fuso no servidor.
@@ -39,6 +45,8 @@ Vistas:
 - `next_to_watch` — por série **seguida**, o primeiro episódio já lançado (`release_at <= now()`, `season > 0`) e não visto.
   Colunas: `show_id, episode_id, season, number, name, air_date, release_at, runtime, remaining` (nº de episódios lançados por ver),
   `last_watched_at` (data em que viu o último episódio da série), `last_watched_air_date` (data de emissão desse episódio).
+- `releases_to_notify` — episódios de séries seguidas lançados nas últimas 24 h (`release_at` entre `now() - 1 day` e `now()`), não vistos e com
+  `notified_at` null; colunas `tmdb_id, show_id, show_name, season, number, name, release_at`. Lida pela Edge Function com a service role.
 - `stats` — `episodes_watched`, `minutes_watched` (runtime do episódio, senão da série, senão 45), `shows_followed`,
   `shows_favorite`, `shows_ended`, `shows_canceled`, `shows_completed` (seguidas, Ended/Canceled e sem nada por ver).
 
@@ -118,6 +126,9 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
 
 ### 5.6 Perfil (`/perfil`)
 - Cabeçalho com botão **Sair**.
+- **Notificações** (só quando o browser suporta push, o service worker está ativo — não em `ng serve` — e há chave VAPID): cartão com botão
+  **Ativar / Desativar**. Ativar pede a permissão, subscreve via `SwPush` e guarda em `push_subscriptions`; desativar apaga o registo e cancela a subscrição.
+  Se a permissão foi bloqueada no browser, mostra "Bloqueadas nas definições do browser" e o botão fica desativado. Ao abrir a app, uma subscrição existente é reenviada (upsert).
 - Tempo total a ver séries (`d h m` a partir de `minutes_watched`) em cartão amarelo.
 - Seis estatísticas: episódios vistos, séries a seguir, séries completas, terminadas, canceladas, episódios por ver (soma de `remaining`).
 - **As minhas séries**: grelha de todas as séries da biblioteca, cada poster com **barra de 4 px no topo** na cor do estado (§4),
@@ -131,6 +142,12 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
 - **Confetis** (`shared/confetti.ts`, canvas sem dependências) quando uma temporada fica completa: ao marcar na Lista para ver o último
   episódio por ver de uma temporada (o próximo por ver passa a ser de outra temporada, ou não há), ou na página da série ao marcar o último
   episódio emitido da temporada / ✓ da temporada.
+
+## 5.8 Notificações de lançamento
+De 5 em 5 min o pg_cron chama `notify-releases`. A função lê `releases_to_notify` e `push_subscriptions`, envia a cada dispositivo uma notificação
+por episódio — título = nome da série, corpo `S03 E04 já saiu — Título`, ícone da app, `tag` `ep-<id>` (não duplica) — no formato que o ngsw mostra sozinho;
+tocar abre `/series` (`navigateLastFocusedOrOpen`). Depois marca `notified_at` nos episódios e apaga subscrições que respondam 404/410 (expiradas).
+Episódios vistos antes de a função correr não são notificados. A janela de 24 h evita avalanches se a função estiver parada algum tempo.
 
 ## 6. Sincronização com o TMDB e TVmaze (`syncFollowed`)
 Ao abrir a página Séries: para cada série seguida cujo `status` não seja Ended/Canceled e com `last_synced_at` há mais de
@@ -165,3 +182,5 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
   `next_to_watch`/`stats` por instante em vez de dia). Lista para ver só a partir da hora; Brevemente e página da série mostram a hora de Lisboa.
   Correr `supabase/2026-10-14-hora-de-lancamento.sql`.
 - 2026-10-15 — Hora mostrada sempre, no formato `00:00h` (também quando é a meia-noite por omissão); séries sem `tvmaze_id` sincronizam logo.
+- 2026-10-19 — Notificações push quando um episódio sai (tabela `push_subscriptions`, `episodes.notified_at`, vista `releases_to_notify`, Edge Function
+  `notify-releases` + pg_cron, `PushService` e cartão Notificações no Perfil). Correr os dois SQL de 2026-10-19 e seguir o README para o deploy da função.

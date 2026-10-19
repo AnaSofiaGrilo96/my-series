@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { LibraryService } from '../../core/library.service';
+import { PushService } from '../../core/push.service';
 import { SupabaseService } from '../../core/supabase.service';
 import { IMG } from '../../core/tmdb.service';
 
@@ -24,6 +25,15 @@ import { IMG } from '../../core/tmdb.service';
         <div><b>{{ toWatch() }}</b><span>episódios por ver</span></div>
       </section>
 
+      @if (push.supported) {
+        <section class="notif">
+          <div><b>Notificações</b><span>{{ push.denied() ? 'Bloqueadas nas definições do browser' : 'Aviso quando sai um episódio' }}</span></div>
+          <button class="btn" [class.ghost]="push.enabled()" [disabled]="push.busy() || push.denied()" (click)="push.enabled() ? push.disable() : push.enable()">
+            {{ push.enabled() ? 'Desativar' : 'Ativar' }}
+          </button>
+        </section>
+      }
+
       <h2 class="section">As minhas séries</h2>
       <div class="grid">
         @for (f of allSorted(); track f.tmdb_id) {
@@ -38,12 +48,15 @@ import { IMG } from '../../core/tmdb.service';
       .big { font-size: 40px; font-weight: 800; letter-spacing: -.02em; span { font-size: 18px; margin-right: 8px; } } .label { font-weight: 700; } }
     .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 16px;
       div { background: var(--surface); border-radius: 12px; padding: 14px 10px; text-align: center; display: flex; flex-direction: column; b { font-size: 24px; } span { color: var(--muted); font-size: 12px; } } }
+    .notif { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 16px; padding: 14px 16px; background: var(--surface); border-radius: 12px;
+      div { display: flex; flex-direction: column; min-width: 0; } b { font-size: 15px; } span { color: var(--muted); font-size: 12px; } .btn { padding: 8px 16px; flex: none; } }
     .section { font-size: 18px; padding: 20px 14px 4px; }
   `],
 })
 export class PerfilComponent {
   lib = inject(LibraryService);
   private sb = inject(SupabaseService);
+  push = inject(PushService);
   private router = inject(Router);
   img = IMG.poster;
   s = computed(() => this.lib.stats()!);

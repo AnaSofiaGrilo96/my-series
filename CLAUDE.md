@@ -24,6 +24,8 @@
 - Alterações ao schema: editar `supabase/schema.sql` **e** criar um ficheiro datado `supabase/AAAA-MM-DD-descricao.sql` com só o delta,
   pronto a colar no SQL Editor (vistas: `drop view if exists` + `create or replace view`). Dizer-lhe que tem de o correr.
 - Temporada 0 (especiais) fica sempre fora de listas e contagens.
+- Edge Functions em `supabase/functions/<nome>/index.ts` (Deno); o deploy é feito pela Ana com o Supabase CLI — dar sempre o comando. Secrets da função
+  nunca no repo nem no `environment.ts` (só a chave VAPID pública vai para o `environment`).
 - As datas `watched_at` anteriores a `MIGRATION_DATE` vieram da migração e são todas iguais: nunca as usar como indicador de hábito.
 - Em listas com scroll automático lembrar que `.toptabs` é sticky (compensar a altura).
 - Datas/horas: a app lê episódios da vista `episode_releases` (tem `release_at`) e nunca compara `air_date` com "hoje" — comparar sempre
