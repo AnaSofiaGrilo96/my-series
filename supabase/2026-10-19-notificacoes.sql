@@ -7,12 +7,18 @@ create table if not exists push_subscriptions (
   created_at   timestamptz not null default now()
 );
 alter table push_subscriptions enable row level security;
+drop policy if exists "auth all push_subscriptions" on push_subscriptions;
 create policy "auth all push_subscriptions" on push_subscriptions for all to authenticated using (true) with check (true);
 
 -- Quando foi enviada a notificação deste episódio (null = ainda não)
 alter table episodes add column if not exists notified_at timestamptz;
 -- Os episódios já lançados até hoje não geram notificações retroativas
 update episodes set notified_at = now() where notified_at is null and release_at(air_at, air_date) <= now();
+
+-- A vista `episode_releases` foi criada com `e.*`, mas as colunas de uma vista ficam fixas na criação:
+-- é preciso recriá-la para passar a incluir `notified_at` (a nova coluna fica no fim, por isso o `or replace` é aceite).
+create or replace view episode_releases as
+select e.*, release_at(e.air_at, e.air_date) as release_at from episodes e;
 
 -- Episódios a notificar: lançados (hora de Lisboa) nas últimas 24 h, de séries seguidas, não vistos e ainda sem notificação.
 -- A janela de 24 h evita avalanches se a função estiver parada algum tempo.

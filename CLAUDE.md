@@ -23,6 +23,8 @@
   O script de importação inicial em `local/` tem chaves reais (service_role do Supabase, token TMDB) — não copiar para fora de `local/`.
 - Alterações ao schema: editar `supabase/schema.sql` **e** criar um ficheiro datado `supabase/AAAA-MM-DD-descricao.sql` com só o delta,
   pronto a colar no SQL Editor (vistas: `drop view if exists` + `create or replace view`). Dizer-lhe que tem de o correr.
+  Atenção: as colunas de uma vista ficam fixas na criação — ao acrescentar uma coluna a `episodes`, recriar `episode_releases` (`e.*`) no mesmo SQL.
+  Scripts sempre idempotentes (`if not exists`, `drop policy if exists`), porque o SQL Editor pode ter de ser corrido outra vez após um erro.
 - Temporada 0 (especiais) fica sempre fora de listas e contagens.
 - Edge Functions em `supabase/functions/<nome>/index.ts` (Deno); o deploy é feito pela Ana com o Supabase CLI — dar sempre o comando. Secrets da função
   nunca no repo nem no `environment.ts` (só a chave VAPID pública vai para o `environment`).
