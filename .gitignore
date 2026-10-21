@@ -47,3 +47,6 @@ Thumbs.db
 
 # ficheiros que o Claude entrega no chat
 /Claude outputs/
+
+# Supabase CLI (link local)
+supabase/.temp/
