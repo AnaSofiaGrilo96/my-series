@@ -25,6 +25,8 @@
   pronto a colar no SQL Editor (vistas: `drop view if exists` + `create or replace view`). Dizer-lhe que tem de o correr.
   Atenção: as colunas de uma vista ficam fixas na criação — ao acrescentar uma coluna a `episodes`, fazer `drop view episode_releases cascade`
   e recriar no mesmo SQL a `episode_releases` **e** as vistas dependentes (`next_to_watch`, `stats`, `releases_to_notify`); `or replace` não chega.
+  Desde 2026-10-30 o Supabase não dá acesso à Data API a tabelas/vistas novas em `public`: cada script que cria uma tabela ou vista termina com
+  `grant select, insert, update, delete on <tabela> to authenticated, service_role;` (vistas: só `select`); nunca a `anon`.
   Scripts sempre idempotentes (`if not exists`, `drop policy if exists`), porque o SQL Editor pode ter de ser corrido outra vez após um erro.
 - Temporada 0 (especiais) fica sempre fora de listas e contagens.
 - Edge Functions em `supabase/functions/<nome>/index.ts` (Deno); o deploy é feito pela Ana com o Supabase CLI — dar sempre o comando. Secrets da função

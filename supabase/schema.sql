@@ -112,4 +112,8 @@ create policy "auth all shows"    on shows    for all to authenticated using (tr
 create policy "auth all episodes" on episodes for all to authenticated using (true) with check (true);
 create policy "auth all watched"  on watched  for all to authenticated using (true) with check (true);
 create policy "auth all push_subscriptions" on push_subscriptions for all to authenticated using (true) with check (true);
+-- Grants explícitos para a Data API (desde 2026-10-30 o Supabase deixou de os dar automaticamente a objetos novos em `public`).
+-- A app usa só `authenticated` (login obrigatório) e a Edge Function usa `service_role`; `anon` não recebe nada.
+grant select, insert, update, delete on shows, episodes, watched, push_subscriptions to authenticated, service_role;
+grant select on episode_releases, next_to_watch, stats, releases_to_notify to authenticated, service_role;
 -- O agendamento das notificações (pg_cron → Edge Function) está em 2026-10-19-notificacoes-cron.sql
