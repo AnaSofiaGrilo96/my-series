@@ -25,3 +25,14 @@ where e.season > 0 and e.release_at > now() - interval '2 days' order by e.relea
 
 -- 6. O que a função enviaria se corresse agora (vazio é normal se já notificou tudo ou se não saiu nada nas últimas 24 h)
 select * from releases_to_notify;
+
+-- 7. Chamar a função já, sem esperar pelo cron (substituir os dois valores entre <> — são os mesmos do SQL do cron, ou copiar do `command` do bloco 2).
+--    Com a função nova, {"test": true} envia uma notificação de teste a todos os dispositivos; com a antiga ignora o body e envia o que estiver pendente (bloco 6).
+select net.http_post(
+  url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/notify-releases',
+  headers := '{"Content-Type": "application/json", "Authorization": "Bearer <CRON_SECRET>"}'::jsonb,
+  body    := '{"test": true}'::jsonb,
+  timeout_milliseconds := 30000
+);
+-- 8. Esperar uns 10 s e correr só isto para ver a resposta (ler o significado dos códigos no bloco 4)
+select status_code, content::text, error_msg, created from net._http_response order by id desc limit 1;
