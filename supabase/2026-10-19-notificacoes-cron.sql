@@ -11,6 +11,7 @@ select cron.schedule('notify-releases', '*/5 * * * *', $$
   select net.http_post(
     url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/notify-releases',
     headers := '{"Content-Type": "application/json", "Authorization": "Bearer <CRON_SECRET>"}'::jsonb,
-    body    := '{}'::jsonb
+    body    := '{}'::jsonb,
+    timeout_milliseconds := 30000   -- o pg_net desiste ao fim de 5 s por omissão; com arranque a frio + envios a função pode demorar mais
   );
 $$);

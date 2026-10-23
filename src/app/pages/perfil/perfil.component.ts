@@ -27,7 +27,8 @@ import { IMG } from '../../core/tmdb.service';
 
       @if (push.supported) {
         <section class="notif">
-          <div><b>Notificações</b><span>{{ push.denied() ? 'Bloqueadas nas definições do browser' : 'Aviso quando sai um episódio' }}</span></div>
+          <div><b>Notificações</b><span>{{ push.denied() ? 'Bloqueadas nas definições do browser' : push.enabled() ? 'Ativas neste dispositivo' : 'Aviso quando sai um episódio' }}</span>
+            @if (push.error(); as e) { <span class="err">{{ e }}</span> }</div>
           <button class="btn" [class.ghost]="push.enabled()" [disabled]="push.busy() || push.denied()" (click)="push.enabled() ? push.disable() : push.enable()">
             {{ push.enabled() ? 'Desativar' : 'Ativar' }}
           </button>
@@ -49,7 +50,7 @@ import { IMG } from '../../core/tmdb.service';
     .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 16px;
       div { background: var(--surface); border-radius: 12px; padding: 14px 10px; text-align: center; display: flex; flex-direction: column; b { font-size: 24px; } span { color: var(--muted); font-size: 12px; } } }
     .notif { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 16px; padding: 14px 16px; background: var(--surface); border-radius: 12px;
-      div { display: flex; flex-direction: column; min-width: 0; } b { font-size: 15px; } span { color: var(--muted); font-size: 12px; } .btn { padding: 8px 16px; flex: none; } }
+      div { display: flex; flex-direction: column; min-width: 0; } b { font-size: 15px; } span { color: var(--muted); font-size: 12px; } .err { color: #e0442f; margin-top: 4px; } .btn { padding: 8px 16px; flex: none; } }
     .section { font-size: 18px; padding: 20px 14px 4px; }
   `],
 })

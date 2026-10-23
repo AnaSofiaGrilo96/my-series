@@ -129,6 +129,8 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
 - **Notificações** (só quando o browser suporta push, o service worker está ativo — não em `ng serve` — e há chave VAPID): cartão com botão
   **Ativar / Desativar**. Ativar pede a permissão, subscreve via `SwPush` e guarda em `push_subscriptions`; desativar apaga o registo e cancela a subscrição.
   Se a permissão foi bloqueada no browser, mostra "Bloqueadas nas definições do browser" e o botão fica desativado. Ao abrir a app, uma subscrição existente é reenviada (upsert).
+  `enabled` só fica true quando o upsert em `push_subscriptions` correu bem ("Ativas neste dispositivo"); se falhar, o cartão mostra o erro a vermelho (`PushService.error`)
+  e volta a oferecer Ativar — assim nunca parece ativo sem a Edge Function conhecer o dispositivo.
 - Tempo total a ver séries (`d h m` a partir de `minutes_watched`) em cartão amarelo.
 - Seis estatísticas: episódios vistos, séries a seguir, séries completas, terminadas, canceladas, episódios por ver (soma de `remaining`).
 - **As minhas séries**: grelha de todas as séries da biblioteca, cada poster com **barra de 4 px no topo** na cor do estado (§4),
@@ -146,8 +148,12 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
 ## 5.8 Notificações de lançamento
 De 5 em 5 min o pg_cron chama `notify-releases`. A função lê `releases_to_notify` e `push_subscriptions`, envia a cada dispositivo uma notificação
 por episódio — título = nome da série, corpo `S03 E04 já saiu — Título`, ícone da app, `tag` `ep-<id>` (não duplica) — no formato que o ngsw mostra sozinho;
-tocar abre `/series` (`navigateLastFocusedOrOpen`). Depois marca `notified_at` nos episódios e apaga subscrições que respondam 404/410 (expiradas).
+tocar abre `/series` (`navigateLastFocusedOrOpen`). Depois marca `notified_at` **só nos episódios que chegaram a pelo menos um dispositivo** — sem subscrições
+ou com todos os envios falhados o episódio fica por notificar e volta a tentar na corrida seguinte (dentro da janela de 24 h) — e apaga subscrições que respondam 404/410 (expiradas).
 Episódios vistos antes de a função correr não são notificados. A janela de 24 h evita avalanches se a função estiver parada algum tempo.
+A resposta JSON (`episodes, devices, sent, notified, removed, errors`) fica em `net._http_response` e serve de diagnóstico; secrets em falta ou erros de leitura
+devolvem 500 com `error`. Body `{"test": true}` envia uma notificação de teste a todos os dispositivos sem tocar nos episódios. O pg_cron chama com timeout de 30 s.
+Diagnóstico passo a passo em `supabase/diagnostico-notificacoes.sql` (ver README).
 
 ## 6. Sincronização com o TMDB e TVmaze (`syncFollowed`)
 Ao abrir a página Séries: para cada série seguida cujo `status` não seja Ended/Canceled e com `last_synced_at` há mais de
@@ -184,3 +190,6 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
 - 2026-10-15 — Hora mostrada sempre, no formato `00:00h` (também quando é a meia-noite por omissão); séries sem `tvmaze_id` sincronizam logo.
 - 2026-10-19 — Notificações push quando um episódio sai (tabela `push_subscriptions`, `episodes.notified_at`, vista `releases_to_notify`, Edge Function
   `notify-releases` + pg_cron, `PushService` e cartão Notificações no Perfil). Correr os dois SQL de 2026-10-19 e seguir o README para o deploy da função.
+- 2026-10-23 — Notificações mais robustas: a app só dá a subscrição como ativa depois de gravada no Supabase (e mostra o erro se falhar); a Edge Function só marca
+  `notified_at` quando o envio chegou a um dispositivo, devolve erros/contagens na resposta e aceita `{"test": true}`; timeout do pg_net a 30 s;
+  `supabase/diagnostico-notificacoes.sql` com as perguntas pela ordem da cadeia. Voltar a fazer deploy da função e (se houver timeouts) correr o SQL do cron.

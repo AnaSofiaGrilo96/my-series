@@ -26,8 +26,9 @@ Dados próprios no Supabase; metadados, pesquisa e episódios vêm do TMDB; a ho
 - **Perfil → As minhas séries**: cada poster tem uma barra no topo com a cor do estado — amarelo = por ver, verde = tudo visto, roxo = terminada — e a grelha está ordenada por estado (por ver → tudo visto → terminadas), alfabeticamente dentro de cada grupo.
 - **Seguir** = aparece nas listas e no Perfil a cores; desseguir mantém o histórico mas tira a série das listas. Não há favoritas.
 - **Notificações**: Perfil → Ativar guarda a subscrição Web Push deste dispositivo em `push_subscriptions`. De 5 em 5 min o pg_cron chama a Edge Function
-  `notify-releases`, que envia "Série — S03 E04 já saiu" por cada episódio lançado nas últimas 24 h (vista `releases_to_notify`) e marca `episodes.notified_at`.
-  O service worker do Angular mostra a notificação; tocar abre a Lista para ver.
+  `notify-releases`, que envia "Série — S03 E04 já saiu" por cada episódio lançado nas últimas 24 h (vista `releases_to_notify`) e marca `episodes.notified_at`
+  só nos episódios que chegaram a algum dispositivo (os outros voltam a tentar na corrida seguinte). O service worker do Angular mostra a notificação; tocar abre a Lista para ver.
+  O cartão no Perfil só diz "Ativas" quando a subscrição ficou mesmo guardada no Supabase; se a gravação falhar mostra o erro.
 
 ## Instalar as notificações (uma vez)
 1. Gerar as chaves VAPID: `npx web-push generate-vapid-keys`.
@@ -38,9 +39,17 @@ Dados próprios no Supabase; metadados, pesquisa e episódios vêm do TMDB; a ho
    supabase functions deploy notify-releases --no-verify-jwt
    ```
 4. SQL Editor: correr `supabase/2026-10-19-notificacoes.sql` e depois `supabase/2026-10-19-notificacoes-cron.sql` (substituir `<PROJECT_REF>` e `<CRON_SECRET>`).
-5. Na app (versão publicada, no telemóvel): Perfil → Notificações → **Ativar** e aceitar a permissão.
-   Para testar sem esperar por um lançamento: `update episodes set notified_at = null where tmdb_id = <id de um episódio lançado hoje>` e chamar a função
-   (`curl -X POST https://<PROJECT_REF>.supabase.co/functions/v1/notify-releases -H "Authorization: Bearer <CRON_SECRET>"`).
+5. Na app (versão publicada, no telemóvel): Perfil → Notificações → **Ativar** e aceitar a permissão. No iPhone a app tem de estar instalada no ecrã inicial.
+6. Testar sem esperar por um lançamento — envia uma notificação de teste a todos os dispositivos registados, sem mexer nos episódios:
+   ```
+   curl -X POST https://<PROJECT_REF>.supabase.co/functions/v1/notify-releases -H "Authorization: Bearer <CRON_SECRET>" -H "Content-Type: application/json" -d '{"test":true}'
+   ```
+   A resposta diz quantos dispositivos há (`devices`), quantos envios correram bem (`sent`) e os erros, se os houver.
+
+## Se as notificações não chegarem
+Correr `supabase/diagnostico-notificacoes.sql` no SQL Editor (só leituras). Os seis blocos seguem a cadeia — subscrição guardada → cron agendado → cron a correr →
+resposta da função → episódios lançados → o que falta notificar — e o primeiro que vier vazio ou com erro aponta a causa (cada bloco tem no comentário o que significa
+cada resultado). Depois de corrigir, o teste do passo 6 confirma a entrega sem esperar por um lançamento.
 
 ## Correr localmente
 ```
