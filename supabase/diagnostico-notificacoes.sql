@@ -1,38 +1,35 @@
--- Diagnóstico das notificações push — só leituras; colar no SQL Editor do Supabase e correr tudo.
--- Cada bloco responde a uma pergunta; o primeiro que vier vazio ou com erro é onde a cadeia está partida.
-
--- 1. Este dispositivo está registado? (uma linha por browser/telemóvel que carregou em Ativar e conseguiu gravar)
---    Vazio → a app não gravou a subscrição (ver o erro no cartão Notificações do Perfil, na versão nova) → Desativar/Ativar outra vez.
-select endpoint, created_at from push_subscriptions order by created_at desc;
-
--- 2. O pg_cron tem o trabalho agendado? (active = true; no command, o url e o secret já têm de estar substituídos — nada entre <>)
-select jobid, jobname, schedule, active, command from cron.job where jobname = 'notify-releases';
-
--- 3. O cron tem corrido de 5 em 5 min? (status succeeded = conseguiu chamar a função; failed → ler return_message)
-select status, return_message, start_time
-from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'notify-releases')
-order by start_time desc limit 12;
-
--- 4. O que a Edge Function respondeu nas últimas chamadas (o pg_net guarda ~6 h):
---    200 + {"sent":N} → a enviar;   {"aviso":"sem subscrições"} → ver 1;   {"error":...} → ler;
---    401 → CRON_SECRET do cron ≠ secret da função;  404 → função não publicada (supabase functions deploy);  error_msg "Timeout" → voltar a correr o SQL do cron (timeout 30 s).
-select id, status_code, content::text, error_msg, created from net._http_response order by id desc limit 12;
-
--- 5. Episódios de séries seguidas lançados nas últimas 48 h e se já foram notificados (notified_at null = por enviar)
-select s.name, e.season, e.number, e.name as episodio, e.release_at, e.notified_at
-from episode_releases e join shows s on s.tmdb_id = e.show_id and s.followed
-where e.season > 0 and e.release_at > now() - interval '2 days' order by e.release_at desc;
-
--- 6. O que a função enviaria se corresse agora (vazio é normal se já notificou tudo ou se não saiu nada nas últimas 24 h)
-select * from releases_to_notify;
-
--- 7. Chamar a função já, sem esperar pelo cron (substituir os dois valores entre <> — são os mesmos do SQL do cron, ou copiar do `command` do bloco 2).
---    Com a função nova, {"test": true} envia uma notificação de teste a todos os dispositivos; com a antiga ignora o body e envia o que estiver pendente (bloco 6).
-select net.http_post(
-  url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/notify-releases',
-  headers := '{"Content-Type": "application/json", "Authorization": "Bearer <CRON_SECRET>"}'::jsonb,
-  body    := '{"test": true}'::jsonb,
-  timeout_milliseconds := 30000
-);
--- 8. Esperar uns 10 s e correr só isto para ver a resposta (ler o significado dos códigos no bloco 4)
-select status_code, content::text, error_msg, created from net._http_response order by id desc limit 1;
+-- Diagnóstico das notificações push — só leituras. Colar tudo no SQL Editor do Supabase e correr: sai UMA tabela com um passo por linha.
+-- (O SQL Editor só mostra o resultado da última instrução, por isso está tudo numa única query.)
+-- A coluna `resultado` pode ser copiada tal e qual para o Claude: o secret do cron sai tapado.
+--
+-- Como ler:  1 vazio/0 → o telemóvel não ficou registado (Perfil → Desativar → Ativar e ver o erro no cartão)
+--            2 "NÃO AGENDADO" ou com <...> → correr o 2026-10-19-notificacoes-cron.sql com os valores reais
+--            3 sem linhas ou "failed" → o pg_cron não está a chamar a função
+--            4 401 → secret do cron ≠ secret da função;  404 → função não publicada (supabase functions deploy);
+--              500 → ler o erro;  "Timeout" → voltar a correr o SQL do cron (timeout 30 s);  vazio → o cron não corre (o pg_net guarda ~6 h)
+--            5/6 → o que saiu nas últimas 48 h e o que a função enviaria agora
+select 1 as passo, 'dispositivos registados (push_subscriptions)' as pergunta,
+       (select count(*)::text || ' — último a ' || coalesce(to_char(max(created_at), 'DD/MM HH24:MI'), '-') from push_subscriptions) as resultado
+union all
+select 2, 'cron agendado',
+       coalesce((select 'active=' || active || ' ' || schedule || ' → ' || regexp_replace(command, 'Bearer [^"'']+', 'Bearer ***', 'g')
+                   from cron.job where jobname = 'notify-releases'), 'NÃO AGENDADO')
+union all
+select 3, 'últimas execuções do cron',
+       coalesce((select string_agg(to_char(start_time, 'DD HH24:MI') || ' ' || status || coalesce(' ' || return_message, ''), ' | ' order by start_time desc)
+                   from (select * from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'notify-releases')
+                         order by start_time desc limit 6) x), 'nenhuma')
+union all
+select 4, 'últimas respostas da função (pg_net)',
+       coalesce((select string_agg(to_char(created, 'DD HH24:MI') || ' ' || coalesce(status_code::text, '-') || ' ' || coalesce(content::text, '') || coalesce(' ERRO: ' || error_msg, ''), ' | ' order by id desc)
+                   from (select * from net._http_response order by id desc limit 6) x), 'nenhuma')
+union all
+select 5, 'episódios de séries seguidas lançados nas últimas 48 h',
+       coalesce((select string_agg(s.name || ' S' || e.season || 'E' || e.number || ' ' || to_char(e.release_at, 'DD HH24:MI')
+                                   || ' → ' || coalesce('notificado ' || to_char(e.notified_at, 'DD HH24:MI'), 'POR NOTIFICAR'), ' | ' order by e.release_at desc)
+                   from episode_releases e join shows s on s.tmdb_id = e.show_id and s.followed
+                   where e.season > 0 and e.release_at > now() - interval '2 days' and e.release_at <= now()), 'nenhum')
+union all
+select 6, 'o que a função enviaria agora (releases_to_notify)',
+       (select count(*)::text || ' episódios' from releases_to_notify)
+order by passo;

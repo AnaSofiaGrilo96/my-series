@@ -153,7 +153,7 @@ ou com todos os envios falhados o episódio fica por notificar e volta a tentar 
 Episódios vistos antes de a função correr não são notificados. A janela de 24 h evita avalanches se a função estiver parada algum tempo.
 A resposta JSON (`episodes, devices, sent, notified, removed, errors`) fica em `net._http_response` e serve de diagnóstico; secrets em falta ou erros de leitura
 devolvem 500 com `error`. Body `{"test": true}` envia uma notificação de teste a todos os dispositivos sem tocar nos episódios. O pg_cron chama com timeout de 30 s.
-Diagnóstico passo a passo em `supabase/diagnostico-notificacoes.sql` (ver README).
+Diagnóstico numa única query em `supabase/diagnostico-notificacoes.sql` e teste de envio em `supabase/testar-notificacoes.sql` (lê url/secret do `cron.job`); ver README.
 
 ## 6. Sincronização com o TMDB e TVmaze (`syncFollowed`)
 Ao abrir a página Séries: para cada série seguida cujo `status` não seja Ended/Canceled e com `last_synced_at` há mais de

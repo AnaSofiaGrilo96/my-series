@@ -40,16 +40,14 @@ Dados próprios no Supabase; metadados, pesquisa e episódios vêm do TMDB; a ho
    ```
 4. SQL Editor: correr `supabase/2026-10-19-notificacoes.sql` e depois `supabase/2026-10-19-notificacoes-cron.sql` (substituir `<PROJECT_REF>` e `<CRON_SECRET>`).
 5. Na app (versão publicada, no telemóvel): Perfil → Notificações → **Ativar** e aceitar a permissão. No iPhone a app tem de estar instalada no ecrã inicial.
-6. Testar sem esperar por um lançamento — envia uma notificação de teste a todos os dispositivos registados, sem mexer nos episódios:
-   ```
-   curl -X POST https://<PROJECT_REF>.supabase.co/functions/v1/notify-releases -H "Authorization: Bearer <CRON_SECRET>" -H "Content-Type: application/json" -d '{"test":true}'
-   ```
-   A resposta diz quantos dispositivos há (`devices`), quantos envios correram bem (`sent`) e os erros, se os houver.
+6. Testar sem esperar por um lançamento: correr `supabase/testar-notificacoes.sql` no SQL Editor (vai buscar o URL e o secret ao trabalho do cron, não há nada a
+   substituir) — envia uma notificação de teste a todos os dispositivos registados, sem mexer nos episódios. A resposta da função (quantos dispositivos, `sent`, erros)
+   aparece ~10 s depois no passo 4 do diagnóstico.
 
 ## Se as notificações não chegarem
-Correr `supabase/diagnostico-notificacoes.sql` no SQL Editor (só leituras). Os seis blocos seguem a cadeia — subscrição guardada → cron agendado → cron a correr →
-resposta da função → episódios lançados → o que falta notificar — e o primeiro que vier vazio ou com erro aponta a causa (cada bloco tem no comentário o que significa
-cada resultado). Depois de corrigir, o teste do passo 6 confirma a entrega sem esperar por um lançamento.
+Correr `supabase/diagnostico-notificacoes.sql` no SQL Editor (só leituras): sai uma única tabela com um passo por linha, pela ordem da cadeia — dispositivos registados →
+cron agendado → cron a correr → resposta da função → episódios lançados → o que falta notificar. O primeiro passo vazio ou com erro aponta a causa (o cabeçalho do ficheiro
+diz o que significa cada resultado; o secret sai tapado, por isso o resultado pode ser copiado para o Claude). Depois de corrigir, `testar-notificacoes.sql` confirma a entrega.
 
 ## Correr localmente
 ```
