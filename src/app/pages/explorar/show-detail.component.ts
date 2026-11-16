@@ -3,6 +3,7 @@ import { Location } from '@angular/common';
 import { EpisodeWithWatched, LibraryService } from '../../core/library.service';
 import { IMG, ShowDetail, TmdbService } from '../../core/tmdb.service';
 import { confetti, tap } from '../../shared/confetti';
+import { realEpisodeName } from '../../shared/episode-name';
 import { dayShort, hourOf } from '../../shared/time';
 
 @Component({
@@ -65,7 +66,7 @@ import { dayShort, hourOf } from '../../shared/time';
                   @if (e.still_path) { <img class="still" [src]="still(e.still_path)" alt="" loading="lazy" /> } @else { <div class="still noimg"></div> }
                   <div class="body">
                     <div class="code">S{{ pad(e.season) }} E{{ pad(e.number) }}</div>
-                    <div class="t">{{ e.name || 'Sem título' }}</div>
+                    @if (title(e.name); as t) { <div class="t">{{ t }}</div> }
                     <div class="d">{{ dateOf(e) }}</div>
                   </div>
                   @if (!isFuture(e)) {
@@ -136,6 +137,8 @@ export class ShowDetailComponent {
   /** "29 out 2026 · 21:00h" em hora de Lisboa (00:00h quando a hora não é conhecida). */
   dateOf = (e: { release_at?: string | null }) => !e.release_at ? 'Sem data' : `${dayShort(e.release_at)} · ${hourOf(e.release_at)}`;
   pad = (n: number) => String(n).padStart(2, '0');
+  /** título do episódio, ou null se não tiver nome próprio (só a numeração) */
+  title = realEpisodeName;
   still = IMG.still;
   seasonPoster = (n: number) => IMG.poster(this.detail()?.seasons.find(s => s.season_number === n)?.poster_path);
 

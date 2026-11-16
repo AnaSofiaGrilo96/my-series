@@ -25,6 +25,8 @@ Dados próprios no Supabase; metadados, pesquisa e episódios vêm do TMDB; a ho
 - **Estado de uma série** (`LibraryService.stateOf`): `pending` (há episódios emitidos por ver) → `ended` (terminada/cancelada, nada por ver) → `done` (tudo visto, ainda em emissão). Por esta ordem de prioridade.
 - **Perfil → As minhas séries**: cada poster tem uma barra no topo com a cor do estado — amarelo = por ver, verde = tudo visto, roxo = terminada — e a grelha está ordenada por estado (por ver → tudo visto → terminadas), alfabeticamente dentro de cada grupo.
 - **Seguir** = aparece nas listas e no Perfil a cores; desseguir mantém o histórico mas tira a série das listas. Não há favoritas.
+- **Nome dos episódios**: por baixo do `S01 | E01` aparece o título oficial — em pt-PT se o TMDB o tiver, senão o original em inglês; se o episódio não tem
+  título não aparece nada (nunca "Episódio 3"). Os nomes genéricos já gravados são corrigidos sozinhos ao abrir a app (`LibraryService.fixGenericNames`).
 - **Notificações**: Perfil → Ativar guarda a subscrição Web Push deste dispositivo em `push_subscriptions`. De 5 em 5 min o pg_cron chama a Edge Function
   `notify-releases`, que envia "Série — S03 E04 já saiu" por cada episódio lançado nas últimas 24 h (vista `releases_to_notify`) e marca `episodes.notified_at`
   só nos episódios que chegaram a algum dispositivo (os outros voltam a tentar na corrida seguinte). O service worker do Angular mostra a notificação; tocar abre a Lista para ver.

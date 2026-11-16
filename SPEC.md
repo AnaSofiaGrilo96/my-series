@@ -164,6 +164,13 @@ os restantes ficam a null → 00:00 de Lisboa). Falhas do TVmaze não impedem a 
 recebem só a ficha da série, uma vez. Sinal `syncing` durante o processo.
 Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a aparecer no Brevemente.
 
+**Nome dos episódios** (`TmdbService.episodes`, `shared/episode-name.ts`): quando um episódio não tem título em pt-PT o TMDB devolve a numeração no lugar do nome
+("Episódio 3"). Nas temporadas onde isso acontece faz-se um segundo pedido em inglês (`NAME_FALLBACK_LANGUAGE`) e grava-se, por ordem: o título pt-PT, senão o
+original, senão `null` — `episodes.name` nunca guarda a numeração (`GENERIC_EPISODE_NAME`). Na interface (cartões das listas e página da série) por baixo do
+`S01 | E01` aparece o título só quando existe; sem título não aparece nada (deixou de haver "Sem título").
+Depois da sincronização normal, `fixGenericNames` procura episódios ainda gravados com nome genérico (de qualquer série — seguida ou não, terminada ou não),
+volta a pedir só essas temporadas e corrige o nome sem tocar em `air_at`; uma vez corrigido tudo, é só uma leitura vazia a cada abertura.
+
 ## 7. Constantes afináveis (`src/app/core/library.service.ts`)
 `SYNC_HOURS = 12`, `RECENT_DAYS = 30`, `CURRENT_AIR_DAYS = 90`, `CURRENT_MAX_REMAINING = 3`, `MIGRATION_DATE = '2026-10-09'`.
 
@@ -193,3 +200,5 @@ Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a
 - 2026-10-23 — Notificações mais robustas: a app só dá a subscrição como ativa depois de gravada no Supabase (e mostra o erro se falhar); a Edge Function só marca
   `notified_at` quando o envio chegou a um dispositivo, devolve erros/contagens na resposta e aceita `{"test": true}`; timeout do pg_net a 30 s;
   `supabase/diagnostico-notificacoes.sql` com as perguntas pela ordem da cadeia. Voltar a fazer deploy da função e (se houver timeouts) correr o SQL do cron.
+- 2026-11-16 — Nome real dos episódios: título pt-PT, senão o original em inglês, senão nada (nunca "Episódio 3"); correção automática dos nomes já gravados
+  ao abrir a app. Sem alterações ao schema.

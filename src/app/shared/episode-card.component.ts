@@ -3,8 +3,9 @@ import { RouterLink } from '@angular/router';
 import { LibraryService } from '../core/library.service';
 import { IMG } from '../core/tmdb.service';
 import { tap } from './confetti';
+import { realEpisodeName } from './episode-name';
 
-/** Cartão de episódio: série, SxxExx, título e botão de "visto". */
+/** Cartão de episódio: série, SxxExx, título (se o episódio tiver um a sério) e botão de "visto". */
 @Component({
   selector: 'app-episode-card',
   imports: [RouterLink],
@@ -16,7 +17,7 @@ import { tap } from './confetti';
         <div class="code">S{{ pad(season()) }} | E{{ pad(number()) }}
           @if (remaining() > 1) { <small>+{{ remaining() - 1 }}</small> }
         </div>
-        <div class="title">{{ title() || subtitle() }}</div>
+        @if (name(); as t) { <div class="title">{{ t }}</div> }
         @if (when()) { <div class="when">{{ when() }}</div> }
       </div>
       <button class="check" [class.done]="shownDone()" [class.pop]="pending()" (click)="onToggle()" [attr.aria-label]="watched() ? 'Desmarcar' : 'Marcar como visto'">
@@ -31,7 +32,8 @@ export class EpisodeCardComponent {
   season = input.required<number>();
   number = input.required<number>();
   title = input<string | null | undefined>();
-  subtitle = input<string>('');
+  /** título a mostrar: nada quando o episódio não tem nome próprio (nomes antigos do tipo "Episódio 3" também ficam de fora) */
+  name = computed(() => realEpisodeName(this.title()));
   /** hora de lançamento já formatada (ex.: "21:00h"); vazio = sem data */
   when = input<string>('');
   remaining = input(0);

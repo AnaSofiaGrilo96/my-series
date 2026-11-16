@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { GENERIC_EPISODE_NAME } from '../shared/episode-name';
 import { Episode, NextToWatch, Show, Stats, WatchedRow } from './models';
 import { SupabaseService } from './supabase.service';
 import { TmdbService } from './tmdb.service';
@@ -14,6 +15,9 @@ export const CURRENT_MAX_REMAINING = 3;
 export const MIGRATION_DATE = '2026-10-09';
 /** Intervalo máximo entre verificações de "já chegou a hora de algum episódio?" com a app aberta. */
 const RELEASE_CHECK_MAX_MS = 3600_000;
+/** Correção dos nomes genéricos já gravados: linhas por pedido e número máximo de voltas por abertura da app. */
+const NAME_FIX_BATCH = 1000;
+const NAME_FIX_MAX_ROUNDS = 30;
 export type HistoryRow = WatchedRow & { episode: Episode };
 export type EpisodeWithWatched = Episode & { watched: boolean };
 export type ShowState = 'pending' | 'ended' | 'done';
@@ -175,8 +179,13 @@ export class LibraryService {
     return s?.season_posters?.[String(season)] ?? s?.poster_path ?? null;
   }
 
-  /** Atualiza episódios das séries seguidas ainda em emissão (corre ao abrir a app). */
+  /** Corre ao abrir a app: atualiza as séries seguidas ainda em emissão e corrige nomes de episódio genéricos que ainda estejam gravados. */
   async syncFollowed() {
+    await this.syncStale();
+    await this.fixGenericNames();
+  }
+  /** Atualiza episódios das séries seguidas ainda em emissão. */
+  private async syncStale() {
     const cutoff = Date.now() - SYNC_HOURS * 3600_000;
     // sem `tvmaze_id` (null = nunca procurado): sincroniza já, para receber as horas de emissão sem esperar pelas 12 h
     const stale = this.shows().filter(s => s.followed
@@ -198,6 +207,42 @@ export class LibraryService {
         await this.upsertEpisodes(s.tmdb_id, seasons.map(x => x.season_number), tvmaze_id);
       }
       await this.loadAll();
+    } finally { this.syncing.set(false); }
+  }
+
+  /** Episódios gravados com a numeração no lugar do nome ("Episódio 3" — o TMDB não tinha o título em pt-PT): volta a pedir só as temporadas
+   *  afetadas, de qualquer série (seguida ou não, terminada ou não), e grava o título original ou null. Depois de corrigido deixa de haver
+   *  linhas assim (a sincronização normal já grava o nome certo), por isso nas aberturas seguintes é só uma leitura vazia.
+   *  Não mexe em `air_at`. Uma série que falhe (TMDB em baixo, série removida) fica para a abertura seguinte. */
+  private async fixGenericNames() {
+    const failed = new Set<number>();
+    let changed = false;
+    try {
+      for (let round = 0; round < NAME_FIX_MAX_ROUNDS; round++) {
+        let q = this.sb.from('episodes').select('tmdb_id,show_id,season,number').filter('name', 'imatch', GENERIC_EPISODE_NAME.source).limit(NAME_FIX_BATCH);
+        if (failed.size) q = q.not('show_id', 'in', `(${[...failed].join(',')})`);
+        const { data } = await q;
+        if (!data?.length) break;
+        this.syncing.set(true);
+        const byShow = new Map<number, typeof data>();
+        for (const r of data) byShow.set(r.show_id, [...(byShow.get(r.show_id) ?? []), r]);
+        for (const [showId, rows] of byShow) {
+          try {
+            const eps = await this.tmdb.episodes(showId, [...new Set(rows.map(r => r.season))]);
+            const byId = new Map(eps.map(e => [e.tmdb_id, e]));
+            const byPos = new Map(eps.map(e => [`${e.season}-${e.number}`, e.name ?? null]));
+            const found = rows.filter(r => byId.has(r.tmdb_id)).map(r => byId.get(r.tmdb_id)!);
+            if (found.length) { const { error } = await this.sb.from('episodes').upsert(found, { onConflict: 'tmdb_id' }); if (error) throw error; }
+            // o id do episódio mudou no TMDB (raro): fica com o nome do mesmo SxxExx, ou sem nome
+            for (const r of rows.filter(r => !byId.has(r.tmdb_id))) {
+              const { error } = await this.sb.from('episodes').update({ name: byPos.get(`${r.season}-${r.number}`) ?? null }).eq('tmdb_id', r.tmdb_id);
+              if (error) throw error;
+            }
+            changed = true;
+          } catch (err) { console.warn('nomes de episódio: série', showId, err); failed.add(showId); }
+        }
+      }
+      if (changed) await this.loadAll();
     } finally { this.syncing.set(false); }
   }
 

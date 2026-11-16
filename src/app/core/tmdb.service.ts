@@ -2,9 +2,12 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { realEpisodeName } from '../shared/episode-name';
 import { Episode, Show, TmdbSearchResult } from './models';
 
 const BASE = 'https://api.themoviedb.org/3';
+/** Língua do título original: usada quando o episódio não tem título em `tmdbLanguage` (o TMDB devolve "Episódio 3" em vez do nome). */
+const NAME_FALLBACK_LANGUAGE = 'en-US';
 export const IMG = {
   poster: (p?: string | null) => p ? `https://image.tmdb.org/t/p/w342${p}` : null,
   backdrop: (p?: string | null) => p ? `https://image.tmdb.org/t/p/w780${p}` : null,
@@ -52,13 +55,22 @@ export class TmdbService {
     return this.get<{ imdb_id?: string | null; tvdb_id?: number | null }>(`/tv/${id}/external_ids`);
   }
 
-  /** Todos os episódios de todas as temporadas. */
+  /** Todos os episódios das temporadas indicadas. `name` é o título a sério: em `tmdbLanguage` se existir, senão o original (inglês),
+   *  senão null — nunca a numeração repetida ("Episódio 3"). O pedido extra em inglês só é feito nas temporadas que precisam. */
   async episodes(showId: number, seasonNumbers: number[]): Promise<Episode[]> {
-    const seasons = await Promise.all(seasonNumbers.map(n => this.get<any>(`/tv/${showId}/season/${n}`)));
-    return seasons.flatMap(s => (s.episodes ?? []).map((e: any): Episode => ({
-      tmdb_id: e.id, show_id: showId, season: e.season_number, number: e.episode_number,
-      name: e.name, air_date: e.air_date || null, runtime: e.runtime ?? null,
-      overview: e.overview, still_path: e.still_path,
-    })));
+    const seasons = await Promise.all(seasonNumbers.map(async n => {
+      const eps: any[] = (await this.get<any>(`/tv/${showId}/season/${n}`)).episodes ?? [];
+      const original = new Map<number, string>();
+      if (environment.tmdbLanguage !== NAME_FALLBACK_LANGUAGE && eps.some(e => !realEpisodeName(e.name))) {
+        const en = await this.get<any>(`/tv/${showId}/season/${n}`, { language: NAME_FALLBACK_LANGUAGE });
+        for (const e of en.episodes ?? []) original.set(e.id, e.name);
+      }
+      return eps.map((e: any): Episode => ({
+        tmdb_id: e.id, show_id: showId, season: e.season_number, number: e.episode_number,
+        name: realEpisodeName(e.name) ?? realEpisodeName(original.get(e.id)), air_date: e.air_date || null, runtime: e.runtime ?? null,
+        overview: e.overview, still_path: e.still_path,
+      }));
+    }));
+    return seasons.flat();
   }
 }
