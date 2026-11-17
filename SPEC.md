@@ -177,8 +177,9 @@ lugar dele e é apagado. Se o segundo upsert falhar, as posições são repostas
 original, senão o do TVmaze (só para o mesmo SxxExx com o mesmo dia de emissão, para não misturar numerações diferentes), senão `null` —
 `episodes.name` nunca guarda a numeração nem "TBA" (`GENERIC_EPISODE_NAME`). Na interface (cartões das listas e página da série) por baixo do
 `S01 | E01` aparece o título só quando existe; sem título não aparece nada (deixou de haver "Sem título").
-Depois da sincronização normal, `fixGenericNames` procura episódios ainda gravados com nome genérico (de qualquer série — seguida ou não, terminada ou não),
-volta a pedir só essas temporadas e corrige o nome sem tocar em `air_at`; uma vez corrigido tudo, é só uma leitura vazia a cada abertura.
+Depois da sincronização normal, `fixGenericNames` procura episódios ainda gravados com nome genérico (vistos ou por ver, de qualquer série — seguida ou não,
+terminada ou não), volta a pedir essas séries inteiras e grava-as por `saveEpisodes` (resolve ids trocados) sem tocar em `air_at`; o que já não existir no TMDB
+fica sem nome. Uma vez corrigido tudo, é só uma leitura vazia a cada abertura.
 
 ## 7. Constantes afináveis (`src/app/core/library.service.ts`)
 `SYNC_HOURS = 12`, `RECENT_DAYS = 30`, `CURRENT_AIR_DAYS = 90`, `CURRENT_MAX_REMAINING = 3`, `MIGRATION_DATE = '2026-10-09'`.

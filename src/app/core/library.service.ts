@@ -269,35 +269,29 @@ export class LibraryService {
     } finally { this.syncing.set(false); }
   }
 
-  /** Episódios gravados com a numeração no lugar do nome ("Episódio 3" — o TMDB não tinha o título em pt-PT): volta a pedir só as temporadas
-   *  afetadas, de qualquer série (seguida ou não, terminada ou não), e grava o título original ou null. Depois de corrigido deixa de haver
-   *  linhas assim (a sincronização normal já grava o nome certo), por isso nas aberturas seguintes é só uma leitura vazia.
+  /** Episódios gravados com a numeração no lugar do nome ("Episódio 3" — o TMDB não tinha o título em pt-PT), vistos ou por ver, de qualquer
+   *  série (seguida ou não, terminada ou não): volta a pedir a série inteira ao TMDB e grava-a por `saveEpisodes` (que também resolve ids
+   *  trocados — era o que prendia Chicago Med e Chicago P.D.); o que mesmo assim ficar com nome genérico já não existe no TMDB e fica sem nome.
+   *  Depois de corrigido deixa de haver linhas assim (a sincronização normal já grava o nome certo): nas aberturas seguintes é só uma leitura vazia.
    *  Não mexe em `air_at`. Uma série que falhe (TMDB em baixo, série removida) fica para a abertura seguinte. */
   private async fixGenericNames() {
     const failed = new Set<number>();
     let changed = false;
     try {
       for (let round = 0; round < NAME_FIX_MAX_ROUNDS; round++) {
-        let q = this.sb.from('episodes').select('tmdb_id,show_id,season,number').filter('name', 'imatch', GENERIC_EPISODE_NAME.source).limit(PAGE_ROWS);
+        let q = this.sb.from('episodes').select('show_id').filter('name', 'imatch', GENERIC_EPISODE_NAME.source).limit(PAGE_ROWS);
         if (failed.size) q = q.not('show_id', 'in', `(${[...failed].join(',')})`);
         const { data } = await q;
         if (!data?.length) break;
         this.syncing.set(true);
-        const byShow = new Map<number, typeof data>();
-        for (const r of data) byShow.set(r.show_id, [...(byShow.get(r.show_id) ?? []), r]);
-        for (const [showId, rows] of byShow) {
+        for (const showId of new Set(data.map(r => r.show_id))) {
           try {
-            const eps = await this.tmdb.episodes(showId, [...new Set(rows.map(r => r.season))]);
-            const byId = new Map(eps.map(e => [e.tmdb_id, e]));
-            const byPos = new Map(eps.map(e => [`${e.season}-${e.number}`, e.name ?? null]));
-            const found = rows.filter(r => byId.has(r.tmdb_id)).map(r => byId.get(r.tmdb_id)!);
-            if (found.length) ok(await this.sb.from('episodes').upsert(found, { onConflict: 'tmdb_id' }));
-            // o id do episódio mudou no TMDB (raro): fica com o nome do mesmo SxxExx, ou sem nome
-            for (const r of rows.filter(r => !byId.has(r.tmdb_id))) {
-              ok(await this.sb.from('episodes').update({ name: byPos.get(`${r.season}-${r.number}`) ?? null }).eq('tmdb_id', r.tmdb_id));
-            }
+            const { seasons } = await this.tmdb.show(showId);
+            const eps = await this.tmdb.episodes(showId, seasons.map(s => s.season_number));
+            if (eps.length) await this.saveEpisodes(showId, eps);
+            ok(await this.sb.from('episodes').update({ name: null }).eq('show_id', showId).filter('name', 'imatch', GENERIC_EPISODE_NAME.source));
             changed = true;
-          } catch (err) { this.syncFailed(`nomes dos episódios (série ${showId})`, err); failed.add(showId); }
+          } catch (err) { this.syncFailed(`nomes dos episódios de ${this.showById().get(showId)?.name ?? showId}`, err); failed.add(showId); }
         }
       }
       if (changed) await this.loadAll();
