@@ -28,6 +28,11 @@
   Desde 2026-10-30 o Supabase não dá acesso à Data API a tabelas/vistas novas em `public`: cada script que cria uma tabela ou vista termina com
   `grant select, insert, update, delete on <tabela> to authenticated, service_role;` (vistas: só `select`); nunca a `anon`.
   Scripts sempre idempotentes (`if not exists`, `drop policy if exists`), porque o SQL Editor pode ter de ser corrido outra vez após um erro.
+- O supabase-js **não lança exceções**: toda a escrita (`insert/upsert/update/delete`) passa por `ok()` (em `library.service.ts`) ou verifica `error`.
+  Um erro calado já custou caro duas vezes (subscrição push; coluna `season_posters` em falta durante um mês).
+- Não assumir que um SQL foi corrido: a BD real pode não ter o que está em `schema.sql`. Quando algo "não grava", ver os pedidos reais na app publicada
+  (painel do navegador do Cowork, com a Ana a fazer login) antes de mexer no código — o `tsc` passar não prova nada sobre a BD nem sobre o TMDB.
+- O TMDB troca ids de episódios de posição e devolve "Episódio N" quando não há título em pt-PT: gravar episódios sempre por `saveEpisodes`/`tmdb.episodes`.
 - Temporada 0 (especiais) fica sempre fora de listas e contagens.
 - Edge Functions em `supabase/functions/<nome>/index.ts` (Deno); o deploy é feito pela Ana com o Supabase CLI — dar sempre o comando. Secrets da função
   nunca no repo nem no `environment.ts` (só a chave VAPID pública vai para o `environment`).

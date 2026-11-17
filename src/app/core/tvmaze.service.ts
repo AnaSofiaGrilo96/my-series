@@ -8,7 +8,10 @@ const MIN_GAP_MS = 550;
 /** Valor guardado em `shows.tvmaze_id` quando a série não existe no TVmaze (para não voltar a procurar). */
 export const TVMAZE_NOT_FOUND = 0;
 
-/** TVmaze: a fonte da hora de emissão (o TMDB só tem a data). Sem chave; horas em `airstamp` (ISO com fuso do canal). */
+/** Episódio no TVmaze: instante de emissão (null = sem hora conhecida), título e dia de emissão. */
+export type TvmazeEpisode = { airstamp: string | null; name: string | null; airdate: string | null };
+
+/** TVmaze: a fonte da hora de emissão (o TMDB só tem a data) e segunda fonte do título dos episódios. Sem chave; horas em `airstamp` (ISO com fuso do canal). */
 @Injectable({ providedIn: 'root' })
 export class TvmazeService {
   private http = inject(HttpClient);
@@ -36,11 +39,11 @@ export class TvmazeService {
     return TVMAZE_NOT_FOUND;
   }
 
-  /** Instante de emissão por episódio, indexado por "temporada-número". Só episódios com hora conhecida. */
-  async airstamps(tvmazeId: number): Promise<Map<string, string>> {
-    const eps = await this.get<{ season: number; number: number | null; airtime: string; airstamp: string | null }[]>(`/shows/${tvmazeId}/episodes`);
-    const map = new Map<string, string>();
-    for (const e of eps ?? []) if (e.number != null && e.airtime && e.airstamp) map.set(`${e.season}-${e.number}`, e.airstamp);
+  /** Episódios da série, indexados por "temporada-número". `airstamp` só vem preenchido quando a hora é conhecida. */
+  async episodes(tvmazeId: number): Promise<Map<string, TvmazeEpisode>> {
+    const eps = await this.get<{ season: number; number: number | null; name: string | null; airdate: string | null; airtime: string; airstamp: string | null }[]>(`/shows/${tvmazeId}/episodes`);
+    const map = new Map<string, TvmazeEpisode>();
+    for (const e of eps ?? []) if (e.number != null) map.set(`${e.season}-${e.number}`, { airstamp: e.airtime && e.airstamp ? e.airstamp : null, name: e.name, airdate: e.airdate || null });
     return map;
   }
 }

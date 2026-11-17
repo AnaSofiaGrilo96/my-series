@@ -164,9 +164,18 @@ os restantes ficam a null → 00:00 de Lisboa). Falhas do TVmaze não impedem a 
 recebem só a ficha da série, uma vez. Sinal `syncing` durante o processo.
 Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a aparecer no Brevemente.
 
+**Robustez da sincronização**: as escritas no Supabase passam por `ok()` (o supabase-js não lança exceções; sem isto um erro ficava calado).
+Cada série é sincronizada num `try` próprio, das há mais tempo por sincronizar para as mais recentes; primeiro gravam-se os episódios e só depois a série
+(`last_synced_at`). O primeiro erro fica em `LibraryService.syncError` e aparece numa faixa vermelha no topo da página Séries. Seguir uma série que falhe mostra um `alert`.
+**Ids trocados no TMDB** (`saveEpisodes`): a tabela só aceita um episódio por `(show_id, season, number)`; quando o TMDB troca dois ids de posição (E5 ↔ E6) ou
+substitui o id de um episódio, o upsert é recusado em bloco (`23505`) e a série deixava de receber episódios e nomes. Nesse caso os episódios que ocupam a posição
+de outro id são tirados do caminho (`number = PARKED - number`), repete-se o upsert e um id que já não existe no TMDB passa o "visto" ao episódio que ficou no
+lugar dele e é apagado. Se o segundo upsert falhar, as posições são repostas e o erro segue para a faixa.
+
 **Nome dos episódios** (`TmdbService.episodes`, `shared/episode-name.ts`): quando um episódio não tem título em pt-PT o TMDB devolve a numeração no lugar do nome
 ("Episódio 3"). Nas temporadas onde isso acontece faz-se um segundo pedido em inglês (`NAME_FALLBACK_LANGUAGE`) e grava-se, por ordem: o título pt-PT, senão o
-original, senão `null` — `episodes.name` nunca guarda a numeração (`GENERIC_EPISODE_NAME`). Na interface (cartões das listas e página da série) por baixo do
+original, senão o do TVmaze (só para o mesmo SxxExx com o mesmo dia de emissão, para não misturar numerações diferentes), senão `null` —
+`episodes.name` nunca guarda a numeração nem "TBA" (`GENERIC_EPISODE_NAME`). Na interface (cartões das listas e página da série) por baixo do
 `S01 | E01` aparece o título só quando existe; sem título não aparece nada (deixou de haver "Sem título").
 Depois da sincronização normal, `fixGenericNames` procura episódios ainda gravados com nome genérico (de qualquer série — seguida ou não, terminada ou não),
 volta a pedir só essas temporadas e corrige o nome sem tocar em `air_at`; uma vez corrigido tudo, é só uma leitura vazia a cada abertura.
@@ -202,3 +211,6 @@ volta a pedir só essas temporadas e corrige o nome sem tocar em `air_at`; uma v
   `supabase/diagnostico-notificacoes.sql` com as perguntas pela ordem da cadeia. Voltar a fazer deploy da função e (se houver timeouts) correr o SQL do cron.
 - 2026-11-16 — Nome real dos episódios: título pt-PT, senão o original em inglês, senão nada (nunca "Episódio 3"); correção automática dos nomes já gravados
   ao abrir a app. Sem alterações ao schema.
+- 2026-11-17 — Sincronização deixa de falhar em silêncio: descobriu-se que a coluna `shows.season_posters` nunca tinha sido criada na BD (o update da série dava 400,
+  `last_synced_at` nunca avançava e todas as séries eram sincronizadas de novo em cada abertura) e que Chicago Med / Chicago P.D. estavam bloqueadas por uma troca de
+  ids no TMDB. Erros visíveis (`ok()`, `syncError`), `saveEpisodes` resolve trocas de ids, TVmaze como segunda fonte do título. Correr `2026-10-09-season-posters.sql`.

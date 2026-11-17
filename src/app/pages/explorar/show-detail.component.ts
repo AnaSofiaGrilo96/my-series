@@ -143,7 +143,12 @@ export class ShowDetailComponent {
   seasonPoster = (n: number) => IMG.poster(this.detail()?.seasons.find(s => s.season_number === n)?.poster_path);
 
   private async reloadEpisodes() { if (this.lib.showById().get(+this.id())) this.episodes.set(await this.lib.episodesOf(+this.id())); }
-  private async run(fn: () => Promise<unknown>) { this.busy.set(true); try { await fn(); await this.reloadEpisodes(); } finally { this.busy.set(false); } }
+  private async run(fn: () => Promise<unknown>) {
+    this.busy.set(true);
+    try { await fn(); await this.reloadEpisodes(); }
+    catch (err) { alert(`Não foi possível gravar: ${err instanceof Error ? err.message : err}`); throw err; }
+    finally { this.busy.set(false); }
+  }
 
   add() { return this.run(() => this.lib.addShow(+this.id())).then(() => this.tab.set('eps')); }
   toggleFollow() { const s = this.saved()!; return this.run(() => this.lib.setFollowed(s.tmdb_id, !s.followed)); }

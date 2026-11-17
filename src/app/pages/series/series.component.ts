@@ -14,6 +14,7 @@ import { dayKey, dayLong, hourOf } from '../../shared/time';
       <button [class.on]="tab() === 'breve'" (click)="setTab('breve')">BREVEMENTE</button>
     </div>
 
+    @if (lib.syncError(); as e) { <div class="syncerr">A sincronização teve erros — {{ e }}</div> }
     @if (!lib.loaded()) { <div class="spinner"></div> }
     @else if (tab() === 'lista') {
       <div class="fade">

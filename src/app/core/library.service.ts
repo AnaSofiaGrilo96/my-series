@@ -1,9 +1,9 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { GENERIC_EPISODE_NAME } from '../shared/episode-name';
+import { GENERIC_EPISODE_NAME, realEpisodeName } from '../shared/episode-name';
 import { Episode, NextToWatch, Show, Stats, WatchedRow } from './models';
 import { SupabaseService } from './supabase.service';
 import { TmdbService } from './tmdb.service';
-import { TVMAZE_NOT_FOUND, TvmazeService } from './tvmaze.service';
+import { TVMAZE_NOT_FOUND, TvmazeEpisode, TvmazeService } from './tvmaze.service';
 
 const SYNC_HOURS = 12;
 /** Série "a acompanhar": viu algum episódio nos últimos N dias... */
@@ -15,12 +15,20 @@ export const CURRENT_MAX_REMAINING = 3;
 export const MIGRATION_DATE = '2026-10-09';
 /** Intervalo máximo entre verificações de "já chegou a hora de algum episódio?" com a app aberta. */
 const RELEASE_CHECK_MAX_MS = 3600_000;
-/** Correção dos nomes genéricos já gravados: linhas por pedido e número máximo de voltas por abertura da app. */
-const NAME_FIX_BATCH = 1000;
+/** Linhas por pedido ao Supabase (o limite por omissão da Data API). */
+const PAGE_ROWS = 1000;
+/** Correção dos nomes genéricos já gravados: número máximo de voltas por abertura da app. */
 const NAME_FIX_MAX_ROUNDS = 30;
+/** Código do Postgres para "já existe uma linha com este valor único" — aqui, dois episódios no mesmo SxxExx. */
+const UNIQUE_VIOLATION = '23505';
+/** Número provisório de um episódio tirado do caminho enquanto se trocam posições (nunca coincide com um número real). */
+const PARKED = -1_000_000;
 export type HistoryRow = WatchedRow & { episode: Episode };
 export type EpisodeWithWatched = Episode & { watched: boolean };
 export type ShowState = 'pending' | 'ended' | 'done';
+
+/** O supabase-js não lança exceções: devolve `{ error }`. Nas escritas passa-se por aqui, para um erro nunca ficar calado. */
+function ok<T extends { error: { message: string } | null }>(r: T): T { if (r.error) throw new Error(r.error.message); return r; }
 
 @Injectable({ providedIn: 'root' })
 export class LibraryService {
@@ -35,6 +43,8 @@ export class LibraryService {
   readonly history = signal<HistoryRow[]>([]);
   readonly stats = signal<Stats | null>(null);
   readonly syncing = signal(false);
+  /** Último erro da sincronização (escrita recusada pelo Supabase, TMDB em baixo…); null = correu bem. Mostrado no topo da página Séries. */
+  readonly syncError = signal<string | null>(null);
   readonly loaded = signal(false);
 
   readonly showById = computed(() => new Map(this.shows().map(s => [s.tmdb_id, s])));
@@ -110,7 +120,7 @@ export class LibraryService {
       last_synced_at: new Date().toISOString(),
       tvmaze_id,
     };
-    await this.sb.from('shows').upsert(row);
+    ok(await this.sb.from('shows').upsert(row));
     await this.upsertEpisodes(tmdbId, seasons.map(s => s.season_number), tvmaze_id);
     await this.loadAll();
   }
@@ -120,14 +130,50 @@ export class LibraryService {
     try { return await this.tvmaze.lookup(await this.tmdb.externalIds(tmdbId)); }
     catch { return TVMAZE_NOT_FOUND; }
   }
-  /** Episódios do TMDB + hora de emissão do TVmaze (quando a série lá existe e o episódio tem hora), gravados em `episodes`. */
+  /** Episódios do TMDB + hora de emissão do TVmaze (quando a série lá existe e o episódio tem hora), gravados em `episodes`.
+   *  Título: o do TMDB; se o TMDB não o tiver, o do TVmaze — só quando o mesmo SxxExx tem lá o mesmo dia de emissão (numerações diferentes não se misturam). */
   private async upsertEpisodes(tmdbId: number, seasonNumbers: number[], tvmazeId?: number | null) {
     const eps = await this.tmdb.episodes(tmdbId, seasonNumbers);
     if (!eps.length) return;
-    let stamps = new Map<string, string>();
-    if (tvmazeId) { try { stamps = await this.tvmaze.airstamps(tvmazeId); } catch { /* sem hora desta vez; fica a do dia */ } }
-    const rows = eps.map(e => ({ ...e, air_at: stamps.get(`${e.season}-${e.number}`) ?? null }));
-    await this.sb.from('episodes').upsert(rows, { onConflict: 'tmdb_id' });
+    let tv = new Map<string, TvmazeEpisode>();
+    if (tvmazeId) { try { tv = await this.tvmaze.episodes(tvmazeId); } catch { /* sem TVmaze desta vez; fica a hora do dia e o título do TMDB */ } }
+    const rows = eps.map(e => {
+      const t = tv.get(`${e.season}-${e.number}`);
+      return { ...e, name: e.name ?? (t && t.airdate === e.air_date ? realEpisodeName(t.name) : null), air_at: t?.airstamp ?? null };
+    });
+    await this.saveEpisodes(tmdbId, rows);
+  }
+  /** Grava todos os episódios de uma série (upsert pelo id do TMDB). A BD só aceita um episódio por SxxExx; quando o TMDB troca dois ids
+   *  de posição (ex.: o E5 e o E6 trocaram entre si) ou substitui o id de um episódio, o upsert é recusado em bloco e a série deixava de
+   *  receber episódios e nomes. Nesse caso tiram-se do caminho os episódios que ocupam a posição de outro id e repete-se o upsert;
+   *  um id que deixou de existir no TMDB passa o "visto" ao episódio que ficou no lugar dele e é apagado. */
+  private async saveEpisodes(showId: number, rows: Episode[]) {
+    const upsert = () => this.sb.from('episodes').upsert(rows, { onConflict: 'tmdb_id' });
+    let res = await upsert();
+    if (res.error?.code === UNIQUE_VIOLATION) {
+      const incoming = new Map(rows.map(e => [`${e.season}-${e.number}`, e.tmdb_id]));
+      const ids = new Set(rows.map(e => e.tmdb_id));
+      const moved = (await this.episodePositions(showId)).filter(d => (incoming.get(`${d.season}-${d.number}`) ?? d.tmdb_id) !== d.tmdb_id);
+      for (const d of moved) ok(await this.sb.from('episodes').update({ number: PARKED - d.number }).eq('tmdb_id', d.tmdb_id));
+      res = await upsert();
+      if (res.error) {   // não era (só) isto: repõe as posições e deixa o erro seguir
+        for (const d of moved) await this.sb.from('episodes').update({ number: d.number }).eq('tmdb_id', d.tmdb_id);
+      } else for (const d of moved.filter(d => !ids.has(d.tmdb_id))) {
+        const { data: w } = await this.sb.from('watched').select('watched_at').eq('episode_id', d.tmdb_id).maybeSingle();
+        if (w) ok(await this.sb.from('watched').upsert({ episode_id: incoming.get(`${d.season}-${d.number}`)!, show_id: showId, watched_at: w.watched_at }, { onConflict: 'episode_id', ignoreDuplicates: true }));
+        ok(await this.sb.from('episodes').delete().eq('tmdb_id', d.tmdb_id));
+      }
+    }
+    ok(res);
+  }
+  /** Id e posição (temporada, número) de todos os episódios gravados de uma série. */
+  private async episodePositions(showId: number) {
+    const all: { tmdb_id: number; season: number; number: number }[] = [];
+    for (let from = 0; ; from += PAGE_ROWS) {
+      const { data } = ok(await this.sb.from('episodes').select('tmdb_id,season,number').eq('show_id', showId).order('tmdb_id').range(from, from + PAGE_ROWS - 1));
+      all.push(...(data ?? []));
+      if ((data?.length ?? 0) < PAGE_ROWS) return all;
+    }
   }
   async setFollowed(tmdbId: number, followed: boolean) {
     await this.sb.from('shows').update({ followed }).eq('tmdb_id', tmdbId);
@@ -181,30 +227,43 @@ export class LibraryService {
 
   /** Corre ao abrir a app: atualiza as séries seguidas ainda em emissão e corrige nomes de episódio genéricos que ainda estejam gravados. */
   async syncFollowed() {
+    this.syncError.set(null);
     await this.syncStale();
     await this.fixGenericNames();
   }
-  /** Atualiza episódios das séries seguidas ainda em emissão. */
+  /** Regista um erro da sincronização sem a interromper (fica o primeiro; os seguintes costumam ser o mesmo, repetido por série). */
+  private syncFailed(what: string, err: unknown) {
+    console.error('sincronização:', what, err);
+    if (!this.syncError()) this.syncError.set(`${what}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  /** Atualiza episódios das séries seguidas ainda em emissão. Uma série que falhe não impede as seguintes. */
   private async syncStale() {
     const cutoff = Date.now() - SYNC_HOURS * 3600_000;
     // sem `tvmaze_id` (null = nunca procurado): sincroniza já, para receber as horas de emissão sem esperar pelas 12 h
     const stale = this.shows().filter(s => s.followed
       && !['Ended', 'Canceled'].includes(s.status ?? '')
-      && (s.tvmaze_id == null || !s.last_synced_at || new Date(s.last_synced_at).getTime() < cutoff));
+      && (s.tvmaze_id == null || !s.last_synced_at || new Date(s.last_synced_at).getTime() < cutoff))
+      // as que estão há mais tempo por sincronizar primeiro: se a app for fechada a meio, a próxima abertura continua em vez de repetir as mesmas
+      .sort((a, b) => (a.last_synced_at ?? '').localeCompare(b.last_synced_at ?? ''));
     // séries antigas sem posters de temporada: só a ficha da série, uma vez (não os episódios)
     const noPosters = this.shows().filter(s => !s.season_posters && !stale.includes(s));
     if (!stale.length && !noPosters.length) return;
     this.syncing.set(true);
     try {
-      for (const s of noPosters) {
-        const { seasons, ...show } = await this.tmdb.show(s.tmdb_id);
-        await this.sb.from('shows').update({ season_posters: show.season_posters }).eq('tmdb_id', s.tmdb_id);
-      }
       for (const s of stale) {
-        const { seasons, ...show } = await this.tmdb.show(s.tmdb_id);
-        const tvmaze_id = await this.resolveTvmaze(s.tmdb_id, s.tvmaze_id);
-        await this.sb.from('shows').update({ ...show, last_synced_at: new Date().toISOString(), tvmaze_id }).eq('tmdb_id', s.tmdb_id);
-        await this.upsertEpisodes(s.tmdb_id, seasons.map(x => x.season_number), tvmaze_id);
+        try {
+          const { seasons, ...show } = await this.tmdb.show(s.tmdb_id);
+          const tvmaze_id = await this.resolveTvmaze(s.tmdb_id, s.tvmaze_id);
+          // primeiro os episódios; a série só fica marcada como sincronizada (`last_synced_at`) se eles ficaram gravados
+          await this.upsertEpisodes(s.tmdb_id, seasons.map(x => x.season_number), tvmaze_id);
+          ok(await this.sb.from('shows').update({ ...show, last_synced_at: new Date().toISOString(), tvmaze_id }).eq('tmdb_id', s.tmdb_id));
+        } catch (err) { this.syncFailed(s.name, err); }
+      }
+      for (const s of noPosters) {
+        try {
+          const { seasons, ...show } = await this.tmdb.show(s.tmdb_id);
+          ok(await this.sb.from('shows').update({ season_posters: show.season_posters }).eq('tmdb_id', s.tmdb_id));
+        } catch (err) { this.syncFailed('posters das temporadas', err); break; }   // a causa é a mesma para todas: não insiste
       }
       await this.loadAll();
     } finally { this.syncing.set(false); }
@@ -219,7 +278,7 @@ export class LibraryService {
     let changed = false;
     try {
       for (let round = 0; round < NAME_FIX_MAX_ROUNDS; round++) {
-        let q = this.sb.from('episodes').select('tmdb_id,show_id,season,number').filter('name', 'imatch', GENERIC_EPISODE_NAME.source).limit(NAME_FIX_BATCH);
+        let q = this.sb.from('episodes').select('tmdb_id,show_id,season,number').filter('name', 'imatch', GENERIC_EPISODE_NAME.source).limit(PAGE_ROWS);
         if (failed.size) q = q.not('show_id', 'in', `(${[...failed].join(',')})`);
         const { data } = await q;
         if (!data?.length) break;
@@ -232,14 +291,13 @@ export class LibraryService {
             const byId = new Map(eps.map(e => [e.tmdb_id, e]));
             const byPos = new Map(eps.map(e => [`${e.season}-${e.number}`, e.name ?? null]));
             const found = rows.filter(r => byId.has(r.tmdb_id)).map(r => byId.get(r.tmdb_id)!);
-            if (found.length) { const { error } = await this.sb.from('episodes').upsert(found, { onConflict: 'tmdb_id' }); if (error) throw error; }
+            if (found.length) ok(await this.sb.from('episodes').upsert(found, { onConflict: 'tmdb_id' }));
             // o id do episódio mudou no TMDB (raro): fica com o nome do mesmo SxxExx, ou sem nome
             for (const r of rows.filter(r => !byId.has(r.tmdb_id))) {
-              const { error } = await this.sb.from('episodes').update({ name: byPos.get(`${r.season}-${r.number}`) ?? null }).eq('tmdb_id', r.tmdb_id);
-              if (error) throw error;
+              ok(await this.sb.from('episodes').update({ name: byPos.get(`${r.season}-${r.number}`) ?? null }).eq('tmdb_id', r.tmdb_id));
             }
             changed = true;
-          } catch (err) { console.warn('nomes de episódio: série', showId, err); failed.add(showId); }
+          } catch (err) { this.syncFailed(`nomes dos episódios (série ${showId})`, err); failed.add(showId); }
         }
       }
       if (changed) await this.loadAll();
