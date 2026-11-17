@@ -6,6 +6,8 @@ import { TmdbService } from './tmdb.service';
 import { TVMAZE_NOT_FOUND, TvmazeEpisode, TvmazeService } from './tvmaze.service';
 
 const SYNC_HOURS = 12;
+/** De quantos em quantos dias se volta a pedir a ficha (posters, estado) das séries que a sincronização normal não toca: terminadas ou não seguidas. */
+const RECORD_REFRESH_DAYS = 7;
 /** Série "a acompanhar": viu algum episódio nos últimos N dias... */
 export const RECENT_DAYS = 30;
 /** ...ou está em dia com uma série em emissão: o último episódio visto foi emitido há menos de N dias e faltam poucos. */
@@ -176,7 +178,8 @@ export class LibraryService {
     }
   }
   async setFollowed(tmdbId: number, followed: boolean) {
-    await this.sb.from('shows').update({ followed }).eq('tmdb_id', tmdbId);
+    // ao voltar a seguir, `last_synced_at` a null faz a série sincronizar os episódios logo na próxima abertura
+    ok(await this.sb.from('shows').update(followed ? { followed, last_synced_at: null } : { followed }).eq('tmdb_id', tmdbId));
     await this.loadAll();
   }
   async removeShow(tmdbId: number) {
@@ -219,6 +222,11 @@ export class LibraryService {
     return Promise.all([this.loadNext(), this.loadHistory(), this.loadStats()]);
   }
 
+  /** Poster mais recente da série: o da última temporada que tem poster (especiais de fora); se nenhuma tiver, o da série. */
+  latestPoster(show: Show) {
+    const seasons = Object.entries(show.season_posters ?? {}).filter(([n, p]) => +n > 0 && p).sort(([a], [b]) => +b - +a);
+    return seasons[0]?.[1] ?? show.poster_path ?? null;
+  }
   /** Poster da temporada (ou da série, se não houver). */
   posterFor(showId: number, season: number) {
     const s = this.showById().get(showId);
@@ -245,9 +253,11 @@ export class LibraryService {
       && (s.tvmaze_id == null || !s.last_synced_at || new Date(s.last_synced_at).getTime() < cutoff))
       // as que estão há mais tempo por sincronizar primeiro: se a app for fechada a meio, a próxima abertura continua em vez de repetir as mesmas
       .sort((a, b) => (a.last_synced_at ?? '').localeCompare(b.last_synced_at ?? ''));
-    // séries antigas sem posters de temporada: só a ficha da série, uma vez (não os episódios)
-    const noPosters = this.shows().filter(s => !s.season_posters && !stale.includes(s));
-    if (!stale.length && !noPosters.length) return;
+    // as restantes (terminadas, não seguidas): só a ficha da série — posters novos, mudança de estado —, de vez em quando (não os episódios)
+    const recordCutoff = Date.now() - RECORD_REFRESH_DAYS * 86400_000;
+    const outdated = this.shows().filter(s => !stale.includes(s)
+      && (!s.season_posters || !s.last_synced_at || new Date(s.last_synced_at).getTime() < recordCutoff));
+    if (!stale.length && !outdated.length) return;
     this.syncing.set(true);
     try {
       for (const s of stale) {
@@ -259,11 +269,11 @@ export class LibraryService {
           ok(await this.sb.from('shows').update({ ...show, last_synced_at: new Date().toISOString(), tvmaze_id }).eq('tmdb_id', s.tmdb_id));
         } catch (err) { this.syncFailed(s.name, err); }
       }
-      for (const s of noPosters) {
+      for (const s of outdated) {
         try {
           const { seasons, ...show } = await this.tmdb.show(s.tmdb_id);
-          ok(await this.sb.from('shows').update({ season_posters: show.season_posters }).eq('tmdb_id', s.tmdb_id));
-        } catch (err) { this.syncFailed('posters das temporadas', err); break; }   // a causa é a mesma para todas: não insiste
+          ok(await this.sb.from('shows').update({ ...show, last_synced_at: new Date().toISOString() }).eq('tmdb_id', s.tmdb_id));
+        } catch (err) { this.syncFailed(`ficha de ${s.name}`, err); }
       }
       await this.loadAll();
     } finally { this.syncing.set(false); }

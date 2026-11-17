@@ -23,7 +23,7 @@ Dados próprios no Supabase; metadados, pesquisa e episódios vêm do TMDB; a ho
   A vista `next_to_watch` fornece `last_watched_at` e `last_watched_air_date` para este cálculo.
 - **Brevemente**: todos os episódios futuros das séries seguidas, agrupados por dia, da data mais próxima para a mais distante. Ao mudar de aba o scroll é reposto (Brevemente no topo; Lista na âncora).
 - **Estado de uma série** (`LibraryService.stateOf`): `pending` (há episódios emitidos por ver) → `ended` (terminada/cancelada, nada por ver) → `done` (tudo visto, ainda em emissão). Por esta ordem de prioridade.
-- **Perfil → As minhas séries**: cada poster tem uma barra no topo com a cor do estado — amarelo = por ver, verde = tudo visto, roxo = terminada — e a grelha está ordenada por estado (por ver → tudo visto → terminadas), alfabeticamente dentro de cada grupo.
+- **Perfil → As minhas séries**: mostra o poster mais recente de cada série (o da última temporada que tem poster; senão o da série). Cada poster tem uma barra no topo com a cor do estado — amarelo = por ver, verde = tudo visto, roxo = terminada — e a grelha está ordenada por estado (por ver → tudo visto → terminadas), alfabeticamente dentro de cada grupo.
 - **Seguir** = aparece nas listas e no Perfil a cores; desseguir mantém o histórico mas tira a série das listas. Não há favoritas.
 - **Nome dos episódios**: por baixo do `S01 | E01` aparece o título oficial — em pt-PT se o TMDB o tiver, senão o original em inglês, senão o do TVmaze; se o episódio não tem
   título não aparece nada (nunca "Episódio 3"). Os nomes genéricos já gravados são corrigidos sozinhos ao abrir a app (`LibraryService.fixGenericNames`).

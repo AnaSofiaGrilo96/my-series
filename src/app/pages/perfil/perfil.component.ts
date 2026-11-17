@@ -38,7 +38,7 @@ import { IMG } from '../../core/tmdb.service';
       <h2 class="section">As minhas séries</h2>
       <div class="grid">
         @for (f of allSorted(); track f.tmdb_id) {
-          <a [routerLink]="['/serie', f.tmdb_id]" [class.off]="!f.followed"><div class="state {{ lib.stateOf(f) }}"></div>@if (f.poster_path) { <img [src]="img(f.poster_path)" alt="" loading="lazy" /> }<div class="name">{{ f.name }}</div></a>
+          <a [routerLink]="['/serie', f.tmdb_id]" [class.off]="!f.followed"><div class="state {{ lib.stateOf(f) }}"></div>@if (lib.latestPoster(f); as p) { <img [src]="img(p)" alt="" loading="lazy" /> }<div class="name">{{ f.name }}</div></a>
         } @empty { <div class="empty" style="grid-column:1/-1">Procura séries em Explorar e carrega em "Seguir".</div> }
       </div>
     }

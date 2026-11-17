@@ -133,7 +133,7 @@ Grelha 3 colunas de posters com nome; ✓ verde se a série já está a ser segu
   e volta a oferecer Ativar — assim nunca parece ativo sem a Edge Function conhecer o dispositivo.
 - Tempo total a ver séries (`d h m` a partir de `minutes_watched`) em cartão amarelo.
 - Seis estatísticas: episódios vistos, séries a seguir, séries completas, terminadas, canceladas, episódios por ver (soma de `remaining`).
-- **As minhas séries**: grelha de todas as séries da biblioteca, cada poster com **barra de 4 px no topo** na cor do estado (§4),
+- **As minhas séries**: grelha de todas as séries da biblioteca com o poster mais recente de cada uma (última temporada com poster; senão o da série), cada poster com **barra de 4 px no topo** na cor do estado (§4),
   ordenadas por estado (por ver → tudo visto → terminadas) e alfabeticamente (`pt`) dentro de cada grupo; séries não seguidas a 45% de opacidade.
 
 ## 5.7 Animações e feedback
@@ -161,7 +161,9 @@ Ao abrir a página Séries: para cada série seguida cujo `status` não seja End
 se `tvmaze_id` ainda é null, procura a série no TVmaze pelos ids externos do TMDB (IMDb, depois TVDB) e guarda o id (0 se não existir —
 não volta a procurar); se existe, vai buscar os `airstamp` dos episódios e grava `air_at` nos que têm hora (emparelhados por temporada+número;
 os restantes ficam a null → 00:00 de Lisboa). Falhas do TVmaze não impedem a sincronização do TMDB. Séries sem `season_posters` (anteriores à coluna)
-recebem só a ficha da série, uma vez. Sinal `syncing` durante o processo.
+recebem só a ficha da série. As séries que esta sincronização não toca (terminadas/canceladas ou não seguidas) recebem também só a ficha —
+posters, estado — de `RECORD_REFRESH_DAYS` (7) em 7 dias, para os posters do Perfil não ficarem parados; voltar a seguir uma série põe `last_synced_at`
+a null para os episódios sincronizarem na abertura seguinte. Sinal `syncing` durante o processo.
 Consequência: uma data de estreia acabada de anunciar pode demorar até ~12 h a aparecer no Brevemente.
 
 **Robustez da sincronização**: as escritas no Supabase passam por `ok()` (o supabase-js não lança exceções; sem isto um erro ficava calado).
@@ -215,3 +217,5 @@ fica sem nome. Uma vez corrigido tudo, é só uma leitura vazia a cada abertura.
 - 2026-11-17 — Sincronização deixa de falhar em silêncio: descobriu-se que a coluna `shows.season_posters` nunca tinha sido criada na BD (o update da série dava 400,
   `last_synced_at` nunca avançava e todas as séries eram sincronizadas de novo em cada abertura) e que Chicago Med / Chicago P.D. estavam bloqueadas por uma troca de
   ids no TMDB. Erros visíveis (`ok()`, `syncError`), `saveEpisodes` resolve trocas de ids, TVmaze como segunda fonte do título. Correr `2026-10-09-season-posters.sql`.
+- 2026-11-17 — Perfil → As minhas séries mostra o poster mais recente de cada série (o da última temporada com poster, `LibraryService.latestPoster`);
+  a ficha das séries terminadas/não seguidas passa a ser atualizada de 7 em 7 dias. Sem alterações ao schema.
